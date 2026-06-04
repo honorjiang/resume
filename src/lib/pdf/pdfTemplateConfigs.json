@@ -1,0 +1,39 @@
+{
+  "modern-template-base.pdf": {
+    "id": "modern",
+    "name": "现代双栏",
+    "version": "v7",
+    "description": "标准 A4 双栏模板，左栏保留短能力摘要，右侧展示职业概述、亮点和工作经历，避免窄栏承载长联系方式。",
+    "blocks": [
+      { "key": "name", "pageIndex": 0, "xMm": 75, "yMm": 20, "widthMm": 110, "heightMm": 12, "fontSize": 24, "lineHeight": 28, "bold": true, "color": "#0f172a" },
+      { "key": "title", "pageIndex": 0, "xMm": 75, "yMm": 36, "widthMm": 110, "heightMm": 8, "fontSize": 11.2, "lineHeight": 13, "color": "#475569" },
+      { "key": "subtitle", "pageIndex": 0, "xMm": 75, "yMm": 49, "widthMm": 110, "heightMm": 12, "fontSize": 8.8, "lineHeight": 11, "color": "#334155" },
+      { "key": "headerMeta", "pageIndex": 0, "xMm": 75, "yMm": 64, "widthMm": 110, "heightMm": 8, "fontSize": 8.2, "lineHeight": 10, "color": "#64748b", "wrapMode": "clip-line" },
+      { "key": "summary", "pageIndex": 0, "xMm": 75, "yMm": 83, "widthMm": 110, "heightMm": 23, "fontSize": 8.9, "lineHeight": 12.1, "color": "#334155" },
+      { "key": "skillsSummary", "pageIndex": 0, "xMm": 20, "yMm": 87, "widthMm": 40, "heightMm": 48, "fontSize": 8.4, "lineHeight": 12.0, "color": "#e8f6fb" },
+      { "key": "focusTags", "pageIndex": 0, "xMm": 20, "yMm": 171, "widthMm": 40, "heightMm": 34, "fontSize": 8.0, "lineHeight": 11.0, "color": "#d7eef8" },
+      { "key": "highlights", "pageIndex": 0, "xMm": 75, "yMm": 119, "widthMm": 110, "heightMm": 47, "fontSize": 8.7, "lineHeight": 12.0, "color": "#334155" },
+      { "key": "experience", "pageIndex": 0, "xMm": 75, "yMm": 180, "widthMm": 110, "heightMm": 70, "fontSize": 8.3, "lineHeight": 11.5, "color": "#334155" },
+      { "key": "education", "pageIndex": 1, "xMm": 23, "yMm": 58, "widthMm": 164, "heightMm": 31, "fontSize": 9.2, "lineHeight": 12.4, "color": "#334155" },
+      { "key": "certificates", "pageIndex": 1, "xMm": 23, "yMm": 112, "widthMm": 164, "heightMm": 42, "fontSize": 9.0, "lineHeight": 12.2, "color": "#334155" },
+      { "key": "contactLinks", "pageIndex": 1, "xMm": 23, "yMm": 171, "widthMm": 164, "heightMm": 42, "fontSize": 9.0, "lineHeight": 12.2, "color": "#334155" }
+    ]
+  },
+  "formal-template-base.pdf": {
+    "id": "formal",
+    "name": "正式商务",
+    "version": "v7",
+    "description": "标准 A4 单栏商务模板，强调 ATS 友好、清晰层级和稳定分页。",
+    "blocks": [
+      { "key": "name", "pageIndex": 0, "xMm": 17, "yMm": 15, "widthMm": 176, "heightMm": 10, "fontSize": 21, "lineHeight": 24, "align": "center", "bold": true, "color": "#111827" },
+      { "key": "title", "pageIndex": 0, "xMm": 17, "yMm": 28, "widthMm": 176, "heightMm": 7, "fontSize": 9.4, "lineHeight": 11, "align": "center", "color": "#374151", "wrapMode": "clip-line" },
+      { "key": "headerMeta", "pageIndex": 0, "xMm": 25, "yMm": 37, "widthMm": 160, "heightMm": 8, "fontSize": 8.2, "lineHeight": 10, "align": "center", "color": "#4b5563", "wrapMode": "clip-line" },
+      { "key": "summary", "pageIndex": 0, "xMm": 17, "yMm": 68, "widthMm": 176, "heightMm": 16, "fontSize": 9.0, "lineHeight": 12.3, "color": "#374151" },
+      { "key": "highlights", "pageIndex": 0, "xMm": 17, "yMm": 108, "widthMm": 176, "heightMm": 36, "fontSize": 8.7, "lineHeight": 11.8, "color": "#374151" },
+      { "key": "experience", "pageIndex": 0, "xMm": 17, "yMm": 165, "widthMm": 176, "heightMm": 80, "fontSize": 8.3, "lineHeight": 11.4, "color": "#374151" },
+      { "key": "skills", "pageIndex": 1, "xMm": 17, "yMm": 48, "widthMm": 176, "heightMm": 51, "fontSize": 8.9, "lineHeight": 12.0, "color": "#374151" },
+      { "key": "education", "pageIndex": 1, "xMm": 17, "yMm": 121, "widthMm": 176, "heightMm": 31, "fontSize": 9.2, "lineHeight": 12.4, "color": "#374151" },
+      { "key": "certificatesAndContact", "pageIndex": 1, "xMm": 17, "yMm": 174, "widthMm": 176, "heightMm": 55, "fontSize": 8.9, "lineHeight": 12.0, "color": "#374151" }
+    ]
+  }
+}

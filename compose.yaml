@@ -1,0 +1,9 @@
+services:
+  resume:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: resume-site
+    ports:
+      - "9989:80"
+    restart: unless-stopped
