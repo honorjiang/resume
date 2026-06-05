@@ -9,6 +9,8 @@ import {
   PROMPT_ATS_SYSTEM,
   PROMPT_OPTIMIZE_SYSTEM,
   PROMPT_OPTIMIZE_USER_RULES,
+  PROMPT_MATERIALS_SYSTEM,
+  PROMPT_INTERVIEW_SYSTEM,
 } from './prompts';
 import type { ResumeProfile } from '../../types/resume';
 import type { ResumeImportAiConfig, ResumeImportProvider } from '../../types/resume-import';
@@ -24,6 +26,12 @@ import type {
   ResumeOptimizationPatch,
   ResumeOptimizationResult,
 } from '../../types/resume-ai';
+import type {
+  ResumeEvidenceScore,
+  ResumeMaterialCategory,
+  ResumeMaterialItem,
+  ResumeInterviewPrompt,
+} from '../../types/resume-workbench';
 
 type OpenAiErrorResponse = {
   error?: {
@@ -182,6 +190,107 @@ const OPTIMIZATION_SCHEMA = {
   },
 } as const;
 
+const CONNECTION_TEST_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['ok', 'message'],
+  properties: {
+    ok: { type: 'boolean' },
+    message: { type: 'string' },
+  },
+} as const;
+
+const EVIDENCE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['score', 'hasMetric', 'hasContext', 'hasAction', 'hasResult', 'missing'],
+  properties: {
+    score: { type: 'number' },
+    hasMetric: { type: 'boolean' },
+    hasContext: { type: 'boolean' },
+    hasAction: { type: 'boolean' },
+    hasResult: { type: 'boolean' },
+    missing: {
+      type: 'array',
+      items: { type: 'string' },
+    },
+  },
+} as const;
+
+const MATERIALS_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['materials'],
+  properties: {
+    materials: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: [
+          'id',
+          'category',
+          'sourceLabel',
+          'title',
+          'content',
+          'path',
+          'tags',
+          'metric',
+          'evidenceLevel',
+          'evidence',
+        ],
+        properties: {
+          id: { type: 'string' },
+          category: {
+            type: 'string',
+            enum: ['achievement', 'project', 'skill', 'highlight'],
+          },
+          sourceLabel: { type: 'string' },
+          title: { type: 'string' },
+          content: { type: 'string' },
+          path: { type: 'string' },
+          tags: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+          metric: { type: 'string' },
+          evidenceLevel: {
+            type: 'string',
+            enum: ['high', 'medium', 'low'],
+          },
+          evidence: EVIDENCE_SCHEMA,
+        },
+      },
+    },
+  },
+} as const;
+
+const INTERVIEW_PROMPTS_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['prompts'],
+  properties: {
+    prompts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['id', 'sourceLabel', 'sourceText', 'questions', 'evidence'],
+        properties: {
+          id: { type: 'string' },
+          sourceLabel: { type: 'string' },
+          sourceText: { type: 'string' },
+          questions: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+          evidence: EVIDENCE_SCHEMA,
+        },
+      },
+    },
+  },
+} as const;
+
 function cleanText(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -198,6 +307,22 @@ function cleanStringArray(value: unknown) {
 
 function normalizeSeverity(value: unknown): ResumeAtsRiskLevel {
   return value === 'high' || value === 'medium' || value === 'low' ? value : 'medium';
+}
+
+function normalizeEvidenceScore(value: unknown): ResumeEvidenceScore {
+  const source = value && typeof value === 'object' ? value : {};
+  const rawScore = Number((source as { score?: unknown }).score);
+
+  return {
+    score: Number.isFinite(rawScore)
+      ? Math.max(0, Math.min(100, Math.round(rawScore)))
+      : 0,
+    hasMetric: Boolean((source as { hasMetric?: unknown }).hasMetric),
+    hasContext: Boolean((source as { hasContext?: unknown }).hasContext),
+    hasAction: Boolean((source as { hasAction?: unknown }).hasAction),
+    hasResult: Boolean((source as { hasResult?: unknown }).hasResult),
+    missing: cleanStringArray((source as { missing?: unknown }).missing),
+  };
 }
 
 function normalizeBaseUrl(baseUrl: string) {
@@ -863,6 +988,172 @@ export function buildResumeAiSnapshot(resume: ResumeProfile) {
 
 export function buildResumeOptimizationCatalog(resume: ResumeProfile) {
   return buildOptimizationCandidates(resume);
+}
+
+export async function testResumeAiConnection(config: ResumeImportAiConfig) {
+  const payload = await requestStructuredAi<{
+    ok?: unknown;
+    message?: unknown;
+  }>(config.provider, {
+    config,
+    operationLabel: 'AI 连接测试',
+    schemaName: 'resume_connection_test',
+    schema: CONNECTION_TEST_SCHEMA as unknown as Record<string, unknown>,
+    systemPrompt: [
+      'You validate that the structured JSON connection works.',
+      'Return ok=true and a short message. Do not request or infer any user data.',
+    ].join('\n'),
+    userPrompt: 'Return a minimal successful connection check response.',
+    maxOutputTokens: 120,
+  });
+
+  return {
+    ok: Boolean(payload.ok),
+    message: cleanText(payload.message) || '连接测试完成。',
+  };
+}
+
+export async function extractResumeMaterials({
+  config,
+  resumeJson,
+}: {
+  config: ResumeImportAiConfig;
+  resumeJson: string;
+}): Promise<ResumeMaterialItem[]> {
+  const userPrompt = [
+    'Extract all achievement materials, project actions/outcomes, skills, and highlights from this resume.',
+    'For each item, set evidenceLevel based on whether it contains measurable metrics.',
+    '',
+    'Resume JSON:',
+    resumeJson,
+  ].join('\n');
+
+  const payload = await requestStructuredAi<{ materials: unknown[] }>(config.provider, {
+    config,
+    operationLabel: '素材提取',
+    schemaName: 'resume_materials',
+    schema: MATERIALS_SCHEMA as unknown as Record<string, unknown>,
+    systemPrompt: PROMPT_MATERIALS_SYSTEM,
+    userPrompt,
+    maxOutputTokens: 4000,
+  });
+
+  return normalizeMaterials(payload);
+}
+
+type RawMaterialItem = {
+  id?: unknown;
+  category?: unknown;
+  sourceLabel?: unknown;
+  title?: unknown;
+  content?: unknown;
+  path?: unknown;
+  tags?: unknown;
+  metric?: unknown;
+  evidenceLevel?: unknown;
+  evidence?: unknown;
+};
+
+type RawInterviewPrompt = {
+  id?: unknown;
+  sourceLabel?: unknown;
+  sourceText?: unknown;
+  questions?: unknown;
+  evidence?: unknown;
+};
+
+function normalizeMaterials(payload: unknown): ResumeMaterialItem[] {
+  const source = payload && typeof payload === 'object' ? payload : {};
+  const rawItems = Array.isArray((source as { materials?: unknown }).materials)
+    ? (source as { materials: RawMaterialItem[] }).materials
+    : [];
+
+  return rawItems
+    .map((item, index) => {
+      const content = cleanText(item.content);
+      if (!content) return null;
+
+      const category = item.category;
+      const validCategory: ResumeMaterialCategory =
+        category === 'achievement' || category === 'project' || category === 'skill' || category === 'highlight'
+          ? category
+          : 'highlight';
+
+      const evidenceLevel = item.evidenceLevel;
+      const validLevel: ResumeAtsRiskLevel =
+        evidenceLevel === 'high' || evidenceLevel === 'medium' || evidenceLevel === 'low'
+          ? evidenceLevel
+          : 'medium';
+
+      return {
+        id: cleanText(item.id) || `material-${index}`,
+        category: validCategory,
+        sourceLabel: cleanText(item.sourceLabel),
+        title: cleanText(item.title),
+        content,
+        path: cleanText(item.path) || `unknown.${index}`,
+        tags: cleanStringArray(item.tags),
+        metric: cleanText(item.metric) || undefined,
+        evidenceLevel: validLevel,
+        evidence: normalizeEvidenceScore(item.evidence),
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+}
+
+export async function extractResumeInterviewPrompts({
+  config,
+  resumeJson,
+}: {
+  config: ResumeImportAiConfig;
+  resumeJson: string;
+}): Promise<ResumeInterviewPrompt[]> {
+  const userPrompt = [
+    'Generate interview follow-up prompts from this resume.',
+    'Focus on claims in experience, project outcomes, highlights, and quantified achievements.',
+    'Return only claims that are useful for interview validation.',
+    '',
+    'Resume JSON:',
+    resumeJson,
+  ].join('\n');
+
+  const payload = await requestStructuredAi<{ prompts: unknown[] }>(config.provider, {
+    config,
+    operationLabel: '面试追问提取',
+    schemaName: 'resume_interview_prompts',
+    schema: INTERVIEW_PROMPTS_SCHEMA as unknown as Record<string, unknown>,
+    systemPrompt: PROMPT_INTERVIEW_SYSTEM,
+    userPrompt,
+    maxOutputTokens: 4000,
+  });
+
+  return normalizeInterviewPrompts(payload);
+}
+
+function normalizeInterviewPrompts(payload: unknown): ResumeInterviewPrompt[] {
+  const source = payload && typeof payload === 'object' ? payload : {};
+  const rawItems = Array.isArray((source as { prompts?: unknown }).prompts)
+    ? (source as { prompts: RawInterviewPrompt[] }).prompts
+    : [];
+
+  return rawItems
+    .map((item, index) => {
+      const sourceText = cleanText(item.sourceText);
+      const questions = cleanStringArray(item.questions);
+
+      if (!sourceText || !questions.length) {
+        return null;
+      }
+
+      return {
+        id: cleanText(item.id) || `interview-${index}`,
+        sourceLabel: cleanText(item.sourceLabel) || '简历经历',
+        sourceText,
+        questions,
+        evidence: normalizeEvidenceScore(item.evidence),
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
 }
 
 export function applyOptimizationPatches(

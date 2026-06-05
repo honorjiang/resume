@@ -1,5 +1,6 @@
 import {
   Archive,
+  BarChart3,
   BriefcaseBusiness,
   CalendarClock,
   CheckCircle2,
@@ -9,10 +10,12 @@ import {
   Plus,
   RotateCcw,
   Search,
+  Tags,
   Trash2,
   Upload,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import type { ResumeVersion } from '../../types/resume-workbench';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 
@@ -38,6 +41,10 @@ type ApplicationRecord = {
   nextActionAt: string;
   contact: string;
   compensation: string;
+  resumeVersionId: string;
+  resumeVersionName: string;
+  jobDescription: string;
+  interviewFeedback: string;
   notes: string;
   archived: boolean;
   updatedAt: string;
@@ -45,6 +52,7 @@ type ApplicationRecord = {
 
 type ApplicationTrackerModalProps = {
   isOpen: boolean;
+  resumeVersions: ResumeVersion[];
   onClose: () => void;
 };
 
@@ -99,7 +107,7 @@ function loadApplications() {
 
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY);
-    return stored ? (JSON.parse(stored) as ApplicationRecord[]) : [];
+    return stored ? normalizeImportedApplications(JSON.parse(stored)) : [];
   } catch {
     return [];
   }
@@ -133,6 +141,61 @@ function isPriority(value: unknown): value is ApplicationRecord['priority'] {
 
 function textValue(value: unknown, fallback = '') {
   return typeof value === 'string' ? value.trim() : fallback;
+}
+
+function getResumeVersionName(resumeVersions: ResumeVersion[], versionId: string) {
+  return resumeVersions.find((version) => version.id === versionId)?.name ?? '';
+}
+
+const STOP_WORDS = new Set([
+  'and',
+  'the',
+  'for',
+  'with',
+  'from',
+  'this',
+  'that',
+  'you',
+  'are',
+  'will',
+  '岗位',
+  '负责',
+  '要求',
+  '优先',
+  '经验',
+  '能力',
+  '熟悉',
+  '相关',
+]);
+
+function collectTerms(text: string) {
+  const normalized = text.toLowerCase();
+  const latinTerms = normalized.match(/[a-z][a-z0-9+#.-]{2,}/g) ?? [];
+  const chineseTerms = normalized.match(/[\u4e00-\u9fa5]{2,8}/g) ?? [];
+
+  return [...latinTerms, ...chineseTerms].filter(
+    (term) => !STOP_WORDS.has(term) && term.length >= 2,
+  );
+}
+
+function buildTermInsights(records: ApplicationRecord[], field: 'jobDescription' | 'interviewFeedback') {
+  const counts = new Map<string, number>();
+
+  for (const record of records) {
+    for (const term of new Set(collectTerms(record[field]))) {
+      counts.set(term, (counts.get(term) ?? 0) + 1);
+    }
+  }
+
+  return [...counts.entries()]
+    .map(([term, count]) => ({ term, count }))
+    .sort((left, right) => right.count - left.count || left.term.localeCompare(right.term))
+    .slice(0, 12);
+}
+
+function rate(part: number, total: number) {
+  if (!total) return 0;
+  return Math.round((part / total) * 100);
 }
 
 function normalizeImportedApplications(value: unknown) {
@@ -171,6 +234,10 @@ function normalizeImportedApplications(value: unknown) {
         nextActionAt: textValue(item.nextActionAt),
         contact: textValue(item.contact),
         compensation: textValue(item.compensation),
+        resumeVersionId: textValue(item.resumeVersionId),
+        resumeVersionName: textValue(item.resumeVersionName),
+        jobDescription: textValue(item.jobDescription),
+        interviewFeedback: textValue(item.interviewFeedback),
         notes: textValue(item.notes),
         archived: Boolean(item.archived),
         updatedAt: textValue(item.updatedAt) || new Date().toISOString(),
@@ -193,6 +260,7 @@ function downloadJsonFile(value: unknown, fileName: string) {
 
 export function ApplicationTrackerModal({
   isOpen,
+  resumeVersions,
   onClose,
 }: ApplicationTrackerModalProps) {
   const [applications, setApplications] =
@@ -235,6 +303,93 @@ export function ApplicationTrackerModal({
     };
   }, [applications]);
 
+  const versionStats = useMemo(() => {
+    const grouped = new Map<
+      string,
+      {
+        name: string;
+        total: number;
+        interviews: number;
+        offers: number;
+        active: number;
+        feedbackCount: number;
+      }
+    >();
+
+    for (const application of applications) {
+      const key = application.resumeVersionId || 'unbound';
+      const current = grouped.get(key) ?? {
+        name: application.resumeVersionName || '未绑定版本',
+        total: 0,
+        interviews: 0,
+        offers: 0,
+        active: 0,
+        feedbackCount: 0,
+      };
+
+      current.total += 1;
+      current.interviews += application.status === 'interview' ? 1 : 0;
+      current.offers += application.status === 'offer' ? 1 : 0;
+      current.active += isActiveApplication(application) ? 1 : 0;
+      current.feedbackCount += application.interviewFeedback.trim() ? 1 : 0;
+      grouped.set(key, current);
+    }
+
+    return [...grouped.entries()]
+      .map(([id, item]) => ({ id, ...item }))
+      .sort((left, right) => {
+        const leftScore = left.interviews * 2 + left.offers * 4;
+        const rightScore = right.interviews * 2 + right.offers * 4;
+        return rightScore - leftScore || right.total - left.total;
+      })
+      .slice(0, 4);
+  }, [applications]);
+
+  const liveApplications = useMemo(
+    () => applications.filter((item) => !item.archived),
+    [applications],
+  );
+
+  const versionInsights = useMemo(() => {
+    const ranked = versionStats.map((item) => ({
+      ...item,
+      interviewRate: rate(item.interviews, item.total),
+      offerRate: rate(item.offers, item.total),
+    }));
+
+    return {
+      mostUsed: [...ranked].sort(
+        (left, right) =>
+          right.total - left.total ||
+          right.interviews - left.interviews ||
+          right.offers - left.offers,
+      )[0],
+      bestInterview: [...ranked].sort(
+        (left, right) =>
+          right.interviewRate - left.interviewRate ||
+          right.interviews - left.interviews ||
+          right.total - left.total,
+      )[0],
+      bestOffer: [...ranked].sort(
+        (left, right) =>
+          right.offerRate - left.offerRate ||
+          right.offers - left.offers ||
+          right.total - left.total,
+      )[0],
+      ranked,
+    };
+  }, [versionStats]);
+
+  const keywordInsights = useMemo(
+    () => buildTermInsights(liveApplications, 'jobDescription'),
+    [liveApplications],
+  );
+
+  const feedbackInsights = useMemo(
+    () => buildTermInsights(liveApplications, 'interviewFeedback'),
+    [liveApplications],
+  );
+
   const filteredApplications = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
@@ -252,8 +407,11 @@ export function ApplicationTrackerModal({
           application.channel,
           application.contact,
           application.compensation,
+          application.resumeVersionName,
+          application.jobDescription,
+          application.interviewFeedback,
           application.notes,
-        ].some((value) => value.toLowerCase().includes(normalizedQuery));
+        ].some((value) => String(value ?? '').toLowerCase().includes(normalizedQuery));
       })
       .filter((application) => {
         switch (activeFilter) {
@@ -280,6 +438,7 @@ export function ApplicationTrackerModal({
     event.preventDefault();
 
     const formData = new FormData(event.currentTarget);
+    const resumeVersionId = fieldValue(formData, 'resumeVersionId');
     const nextRecord: ApplicationRecord = {
       id: createId(),
       company: fieldValue(formData, 'company'),
@@ -295,6 +454,10 @@ export function ApplicationTrackerModal({
       nextActionAt: fieldValue(formData, 'nextActionAt'),
       contact: fieldValue(formData, 'contact'),
       compensation: fieldValue(formData, 'compensation'),
+      resumeVersionId,
+      resumeVersionName: getResumeVersionName(resumeVersions, resumeVersionId),
+      jobDescription: fieldValue(formData, 'jobDescription'),
+      interviewFeedback: fieldValue(formData, 'interviewFeedback'),
       notes: fieldValue(formData, 'notes'),
       archived: false,
       updatedAt: new Date().toISOString(),
@@ -316,6 +479,7 @@ export function ApplicationTrackerModal({
     const formData = new FormData(event.currentTarget);
     const company = fieldValue(formData, 'company');
     const role = fieldValue(formData, 'role');
+    const resumeVersionId = fieldValue(formData, 'resumeVersionId');
 
     if (!company || !role) return;
 
@@ -329,6 +493,12 @@ export function ApplicationTrackerModal({
       nextActionAt: fieldValue(formData, 'nextActionAt'),
       contact: fieldValue(formData, 'contact'),
       compensation: fieldValue(formData, 'compensation'),
+      resumeVersionId,
+      resumeVersionName:
+        getResumeVersionName(resumeVersions, resumeVersionId) ||
+        fieldValue(formData, 'resumeVersionName'),
+      jobDescription: fieldValue(formData, 'jobDescription'),
+      interviewFeedback: fieldValue(formData, 'interviewFeedback'),
       notes: fieldValue(formData, 'notes'),
     });
     setEditingId(null);
@@ -529,6 +699,123 @@ export function ApplicationTrackerModal({
                 {showArchived ? '隐藏归档' : `显示归档 ${stats.archived}`}
               </Button>
             </div>
+
+            {versionStats.length ? (
+              <>
+                <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                      <BarChart3 className="size-4" />
+                      投递最多
+                    </div>
+                    <p className="mt-2 truncate text-sm font-semibold text-slate-950">
+                      {versionInsights.mostUsed?.name || '暂无'}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {versionInsights.mostUsed?.total ?? 0} 次投递
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-violet-200 bg-violet-50/70 p-4">
+                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-violet-500">
+                      <CheckCircle2 className="size-4" />
+                      面试率最高
+                    </div>
+                    <p className="mt-2 truncate text-sm font-semibold text-slate-950">
+                      {versionInsights.bestInterview?.name || '暂无'}
+                    </p>
+                    <p className="mt-1 text-xs text-violet-700">
+                      {versionInsights.bestInterview?.interviewRate ?? 0}% 面试率
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
+                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-emerald-600">
+                      <BriefcaseBusiness className="size-4" />
+                      Offer 表现
+                    </div>
+                    <p className="mt-2 truncate text-sm font-semibold text-slate-950">
+                      {versionInsights.bestOffer?.name || '暂无'}
+                    </p>
+                    <p className="mt-1 text-xs text-emerald-700">
+                      {versionInsights.bestOffer?.offerRate ?? 0}% Offer 率
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
+                  {versionInsights.ranked.map((version) => (
+                    <div
+                      key={version.id}
+                      className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4"
+                    >
+                      <p className="truncate text-sm font-semibold text-slate-900">
+                        {version.name}
+                      </p>
+                      <div className="mt-3 grid grid-cols-4 gap-2 text-center text-[11px]">
+                        <div className="rounded-xl bg-white px-2 py-1.5 text-slate-600">
+                          <p className="font-semibold text-slate-950">{version.total}</p>
+                          投递
+                        </div>
+                        <div className="rounded-xl bg-white px-2 py-1.5 text-violet-700">
+                          <p className="font-semibold">{version.interviewRate}%</p>
+                          面试率
+                        </div>
+                        <div className="rounded-xl bg-white px-2 py-1.5 text-emerald-700">
+                          <p className="font-semibold">{version.offerRate}%</p>
+                          Offer
+                        </div>
+                        <div className="rounded-xl bg-white px-2 py-1.5 text-sky-700">
+                          <p className="font-semibold">{version.feedbackCount}</p>
+                          反馈
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : null}
+
+            {(keywordInsights.length || feedbackInsights.length) ? (
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    <Tags className="size-4 text-slate-500" />
+                    JD 高频关键词
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {keywordInsights.map((item) => (
+                      <span
+                        key={item.term}
+                        className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700"
+                      >
+                        {item.term} · {item.count}
+                      </span>
+                    ))}
+                    {!keywordInsights.length ? (
+                      <span className="text-sm text-slate-400">暂无 JD 关键词。</span>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                    <ClipboardList className="size-4 text-slate-500" />
+                    面试反馈主题
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {feedbackInsights.map((item) => (
+                      <span
+                        key={item.term}
+                        className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700"
+                      >
+                        {item.term} · {item.count}
+                      </span>
+                    ))}
+                    {!feedbackInsights.length ? (
+                      <span className="text-sm text-slate-400">暂无面试反馈。</span>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {isAdding ? (
@@ -632,6 +919,45 @@ export function ApplicationTrackerModal({
                     name="compensation"
                     placeholder="例如：60-80k / 面议"
                     className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
+                  />
+                </label>
+                <label className="block lg:col-span-2">
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    简历版本
+                  </span>
+                  <select
+                    name="resumeVersionId"
+                    defaultValue={resumeVersions[0]?.id ?? ''}
+                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
+                  >
+                    <option value="">未绑定版本</option>
+                    {resumeVersions.map((version) => (
+                      <option key={version.id} value={version.id}>
+                        {version.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block lg:col-span-4">
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    JD / 岗位关键词
+                  </span>
+                  <textarea
+                    name="jobDescription"
+                    rows={3}
+                    placeholder="粘贴岗位描述、关键词、业务要求，便于回看版本命中情况。"
+                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
+                  />
+                </label>
+                <label className="block lg:col-span-4">
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    面试反馈
+                  </span>
+                  <textarea
+                    name="interviewFeedback"
+                    rows={3}
+                    placeholder="记录面试官追问、反馈、薄弱点和下一版简历需要强化的证据。"
+                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
                   />
                 </label>
                 <label className="block lg:col-span-4">
@@ -768,6 +1094,50 @@ export function ApplicationTrackerModal({
                     name="compensation"
                     defaultValue={editingApplication.compensation}
                     className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
+                  />
+                </label>
+                <label className="block lg:col-span-2">
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    简历版本
+                  </span>
+                  <select
+                    name="resumeVersionId"
+                    defaultValue={editingApplication.resumeVersionId}
+                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
+                  >
+                    <option value="">未绑定版本</option>
+                    {resumeVersions.map((version) => (
+                      <option key={version.id} value={version.id}>
+                        {version.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="hidden"
+                    name="resumeVersionName"
+                    value={editingApplication.resumeVersionName}
+                  />
+                </label>
+                <label className="block lg:col-span-4">
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    JD / 岗位关键词
+                  </span>
+                  <textarea
+                    name="jobDescription"
+                    rows={3}
+                    defaultValue={editingApplication.jobDescription}
+                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
+                  />
+                </label>
+                <label className="block lg:col-span-4">
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    面试反馈
+                  </span>
+                  <textarea
+                    name="interviewFeedback"
+                    rows={3}
+                    defaultValue={editingApplication.interviewFeedback}
+                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
                   />
                 </label>
                 <label className="block lg:col-span-4">
@@ -921,7 +1291,7 @@ export function ApplicationTrackerModal({
 
                     {editingId !== application.id ? (
                     <>
-                    <div className="mt-5 grid gap-3 text-sm text-slate-600 md:grid-cols-3">
+                    <div className="mt-5 grid gap-3 text-sm text-slate-600 md:grid-cols-4">
                       <div className="rounded-2xl bg-slate-50 p-3">
                         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
                           <ClipboardList className="size-4" />
@@ -949,9 +1319,21 @@ export function ApplicationTrackerModal({
                           {application.compensation || '待确认'}
                         </p>
                       </div>
+                      <div className="rounded-2xl bg-slate-50 p-3">
+                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                          <BriefcaseBusiness className="size-4" />
+                          版本
+                        </div>
+                        <p className="mt-2 text-slate-800">
+                          {application.resumeVersionName || '未绑定'}
+                        </p>
+                      </div>
                     </div>
 
-                    {(application.contact || application.notes) && (
+                    {(application.contact ||
+                      application.jobDescription ||
+                      application.interviewFeedback ||
+                      application.notes) && (
                       <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-sm leading-6 text-slate-600">
                         {application.contact ? (
                           <p>
@@ -959,6 +1341,22 @@ export function ApplicationTrackerModal({
                               联系：
                             </span>
                             {application.contact}
+                          </p>
+                        ) : null}
+                        {application.jobDescription ? (
+                          <p>
+                            <span className="font-semibold text-slate-800">
+                              JD：
+                            </span>
+                            {application.jobDescription}
+                          </p>
+                        ) : null}
+                        {application.interviewFeedback ? (
+                          <p>
+                            <span className="font-semibold text-slate-800">
+                              面试反馈：
+                            </span>
+                            {application.interviewFeedback}
                           </p>
                         ) : null}
                         {application.notes ? <p>{application.notes}</p> : null}

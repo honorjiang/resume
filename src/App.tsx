@@ -23,6 +23,7 @@ import type {
   ResumeOptimizationResult,
 } from './types/resume-ai';
 import type { ResumeProfile } from './types/resume';
+import type { ResumeVersion } from './types/resume-workbench';
 
 const PdfPreviewModal = lazy(() =>
   import('./components/pdf/PdfPreviewModal').then((module) => ({
@@ -60,6 +61,7 @@ type ImportedPdfSource = {
 type AiEditedFieldMap = Record<string, ResumeAiEditedField>;
 
 const RESUME_DRAFT_STORAGE_KEY = 'resume-local-draft';
+const RESUME_VERSIONS_STORAGE_KEY = 'resume-role-versions';
 const LEGACY_LAYOUT_OVERRIDE_STORAGE_KEY = 'resume-layout-overrides';
 const DEFAULT_RESUME_SNAPSHOT = JSON.stringify(resumeProfile);
 
@@ -80,6 +82,37 @@ function loadStoredResumeDraft() {
   } catch {
     return cloneResumeProfile(resumeProfile);
   }
+}
+
+function loadStoredResumeVersions() {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+
+  try {
+    const stored = window.localStorage.getItem(RESUME_VERSIONS_STORAGE_KEY);
+    return stored ? (JSON.parse(stored) as ResumeVersion[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function createId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function buildRoleVersionName(targetRole: string) {
+  const normalizedRole = targetRole.trim() || '岗位定制版本';
+  const dateLabel = new Date().toLocaleDateString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+  });
+
+  return `${normalizedRole} · ${dateLabel}`;
 }
 
 function downloadBlob(blob: Blob, fileName: string) {
@@ -156,6 +189,9 @@ function App() {
   const [editableResume, setEditableResume] = useState<ResumeProfile>(
     loadStoredResumeDraft,
   );
+  const [resumeVersions, setResumeVersions] = useState<ResumeVersion[]>(
+    loadStoredResumeVersions,
+  );
   const [pdfSource, setPdfSource] = useState<ImportedPdfSource | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [aiWorkbenchOpen, setAiWorkbenchOpen] = useState(false);
@@ -208,6 +244,17 @@ function App() {
 
     window.localStorage.setItem(RESUME_DRAFT_STORAGE_KEY, resumeSnapshot);
   }, [resumeSnapshot]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(
+      RESUME_VERSIONS_STORAGE_KEY,
+      JSON.stringify(resumeVersions),
+    );
+  }, [resumeVersions]);
 
   useEffect(() => {
     return () => {
@@ -412,11 +459,61 @@ function App() {
     [activeResume, resumeImport.config],
   );
 
+  const runExtractMaterials = useCallback(async () => {
+    if (!resumeImport.config.apiKey.trim()) {
+      throw new Error('请先配置可用的 AI API Key。');
+    }
+
+    const { buildResumeAiSnapshot, extractResumeMaterials } = await import(
+      './lib/ai/resumeAssistant'
+    );
+
+    return extractResumeMaterials({
+      config: resumeImport.config,
+      resumeJson: buildResumeAiSnapshot(activeResume),
+    });
+  }, [activeResume, resumeImport.config]);
+
+  const runExtractInterviewPrompts = useCallback(async () => {
+    if (!resumeImport.config.apiKey.trim()) {
+      throw new Error('请先配置可用的 AI API Key。');
+    }
+
+    const { buildResumeAiSnapshot, extractResumeInterviewPrompts } = await import(
+      './lib/ai/resumeAssistant'
+    );
+
+    return extractResumeInterviewPrompts({
+      config: resumeImport.config,
+      resumeJson: buildResumeAiSnapshot(activeResume),
+    });
+  }, [activeResume, resumeImport.config]);
+
+  const runAiConnectionTest = useCallback(async () => {
+    if (!resumeImport.config.apiKey.trim()) {
+      throw new Error('请先配置可用的 AI API Key。');
+    }
+
+    const { testResumeAiConnection } = await import('./lib/ai/resumeAssistant');
+
+    return testResumeAiConnection(resumeImport.config);
+  }, [resumeImport.config]);
+
   const applyJobOptimization = useCallback(
-    (result: ResumeOptimizationResult) => {
+    (
+      result: ResumeOptimizationResult,
+      meta?: {
+        jobDescription?: string;
+        atsScore?: number;
+        versionName?: string;
+      },
+    ) => {
       if (!result.patches.length) {
         return;
       }
+
+      const versionResume = cloneResumeProfile(activeResume);
+      applyOptimizationPatchesToResume(versionResume, result.patches);
 
       markAiEditedFields(
         Object.fromEntries(
@@ -433,9 +530,56 @@ function App() {
       updateResume((draft) => {
         applyOptimizationPatchesToResume(draft, result.patches);
       });
+
+      const now = new Date().toISOString();
+      const targetRole = result.targetRole || meta?.versionName || '岗位定制版本';
+      const nextVersion: ResumeVersion = {
+        id: createId(),
+        name: meta?.versionName || buildRoleVersionName(targetRole),
+        targetRole,
+        jobDescription: meta?.jobDescription?.trim() || '',
+        createdAt: now,
+        updatedAt: now,
+        resume: versionResume,
+        patches: result.patches,
+        keywordCoverage: result.keywordCoverage,
+        atsScore: meta?.atsScore,
+        notes: result.summary,
+      };
+
+      setResumeVersions((current) => [nextVersion, ...current].slice(0, 12));
     },
-    [markAiEditedFields, updateResume],
+    [activeResume, markAiEditedFields, updateResume],
   );
+
+  const applyResumeVersion = useCallback(
+    (versionId: string) => {
+      const version = resumeVersions.find((item) => item.id === versionId);
+      if (!version) {
+        return;
+      }
+
+      setEditableResume(cloneResumeProfile(version.resume));
+      setAiEditedFields(
+        Object.fromEntries(
+          version.patches.map((patch) => [
+            patch.path,
+            {
+              action: 'optimize' as const,
+              value: patch.suggestedValue,
+            },
+          ]),
+        ),
+      );
+      replacePreview(null);
+      setIsEditing(false);
+    },
+    [replacePreview, resumeVersions],
+  );
+
+  const deleteResumeVersion = useCallback((versionId: string) => {
+    setResumeVersions((current) => current.filter((item) => item.id !== versionId));
+  }, []);
 
   const sectionNavItems = useMemo(
     () =>
@@ -686,17 +830,26 @@ function App() {
             <ResumeAiWorkbenchModal
               isOpen={aiWorkbenchOpen}
               config={resumeImport.config}
+              resume={activeResume}
+              resumeFingerprint={resumeSnapshot}
+              resumeVersions={resumeVersions}
               onClose={() => setAiWorkbenchOpen(false)}
               onConfigChange={resumeImport.updateConfig}
+              onTestConnection={runAiConnectionTest}
               onRunAtsCheck={runAtsCheck}
               onRunJobOptimization={runJobOptimization}
               onApplyOptimization={applyJobOptimization}
+              onApplyVersion={applyResumeVersion}
+              onDeleteVersion={deleteResumeVersion}
+              onExtractMaterials={runExtractMaterials}
+              onExtractInterviewPrompts={runExtractInterviewPrompts}
             />
           ) : null}
 
           {applicationTrackerOpen ? (
             <ApplicationTrackerModal
               isOpen={applicationTrackerOpen}
+              resumeVersions={resumeVersions}
               onClose={() => setApplicationTrackerOpen(false)}
             />
           ) : null}

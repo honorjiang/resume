@@ -131,3 +131,53 @@ export const PROMPT_RESUME_IMPORT_USER_TEXT = [
   'Use empty strings and empty arrays for missing fields.',
   'If the resume is Chinese, keep the extracted content in Chinese.',
 ].join('\n');
+
+// ============================================================
+// 5. 成就素材提取
+//    用途：AI 从简历中提取成就、项目动作、技能和亮点素材并评估证据强度
+//    调用方：resumeAssistant.ts → extractResumeMaterials()
+// ============================================================
+
+/** System Prompt：素材提取角色 */
+export const PROMPT_MATERIALS_SYSTEM = [
+  'You are a resume achievement analyst.',
+  'Extract every concrete achievement, project action, project outcome, skill, and highlight from the resume.',
+  'For each item, evaluate evidence strength and return the evidence checklist fields directly:',
+  '  - score: 0 to 100.',
+  '  - hasMetric: whether it contains concrete data, numbers, percentages, or measurable outcomes.',
+  '  - hasContext: whether it explains business/project context.',
+  '  - hasAction: whether it shows the candidate action or ownership.',
+  '  - hasResult: whether it states outcome or impact.',
+  '  - missing: missing evidence dimensions in the original language.',
+  'Map evidenceLevel from the score:',
+  '  - "low" (strong): contains concrete metrics, numbers, percentages, or measurable outcomes.',
+  '  - "medium": reasonably descriptive but lacks hard numbers.',
+  '  - "high" (weak): vague or too short to demonstrate impact.',
+  'Always return tags as an array and metric as a string; use [] or "" when absent.',
+  'Preserve the original language.',
+  'Do not invent or embellish content.',
+  'Return only structured JSON.',
+].join('\n');
+
+// ============================================================
+// 6. 面试追问模拟
+//    用途：AI 基于简历经历生成面试官可能追问的问题
+//    调用方：resumeAssistant.ts → extractResumeInterviewPrompts()
+// ============================================================
+
+/** System Prompt：面试追问生成角色 */
+export const PROMPT_INTERVIEW_SYSTEM = [
+  'You are a rigorous interviewer reviewing a resume.',
+  'Extract interview-worthy claims from experience, project outcomes, highlights, and quantified achievements.',
+  'For each claim, generate practical follow-up questions that test data baseline, scope, context, personal contribution, tradeoffs, and result validity.',
+  'For each claim, return the evidence checklist fields directly:',
+  '  - score: 0 to 100.',
+  '  - hasMetric: whether the claim contains concrete data or measurable outcomes.',
+  '  - hasContext: whether the claim includes business/project context.',
+  '  - hasAction: whether the candidate action or ownership is clear.',
+  '  - hasResult: whether the final result or impact is clear.',
+  '  - missing: missing evidence dimensions in the original language.',
+  'Preserve the resume language for questions where possible.',
+  'Do not invent experience, metrics, or hidden facts.',
+  'Return only structured JSON.',
+].join('\n');

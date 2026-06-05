@@ -119,9 +119,11 @@ select {
   background-color: rgba(15, 27, 45, 0.92) !important;
 }
 
+:root[data-theme='dark'] .bg-white\/82,
 :root[data-theme='dark'] .bg-white\/80,
 :root[data-theme='dark'] .bg-white\/75,
-:root[data-theme='dark'] .bg-white\/70 {
+:root[data-theme='dark'] .bg-white\/70,
+:root[data-theme='dark'] .bg-white\/68 {
   background-color: rgba(15, 27, 45, 0.78) !important;
 }
 
