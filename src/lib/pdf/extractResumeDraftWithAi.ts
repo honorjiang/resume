@@ -533,6 +533,42 @@ function parseResumePayload(payload: unknown, rawText: string) {
   return buildDraft(payload as AiResumePayload, rawText);
 }
 
+/**
+ * Try to extract a JSON object from the model output.
+ * Handles: plain JSON, markdown code fences (```json ... ```), leading/trailing text.
+ */
+function extractJsonFromOutput(text: string): unknown {
+  // 1. Try direct parse
+  try {
+    return JSON.parse(text);
+  } catch {
+    // continue
+  }
+
+  // 2. Strip markdown code fences: ```json ... ``` or ``` ... ```
+  const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+  if (fenceMatch) {
+    try {
+      return JSON.parse(fenceMatch[1]);
+    } catch {
+      // continue
+    }
+  }
+
+  // 3. Find first { ... last } and try to parse that substring
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    try {
+      return JSON.parse(text.slice(firstBrace, lastBrace + 1));
+    } catch {
+      // continue
+    }
+  }
+
+  return null;
+}
+
 async function requestViaOpenAiResponses(
   config: ResumeImportAiConfig,
   file: File,
@@ -579,7 +615,7 @@ async function requestViaOpenAiResponses(
           ],
         },
       ],
-      max_output_tokens: 4000,
+      max_output_tokens: 16000,
       text: {
         format: {
           type: 'json_schema',
@@ -622,11 +658,16 @@ async function requestViaOpenAiResponses(
     throw new Error('AI 未返回结构化简历数据。');
   }
 
-  try {
-    return parseResumePayload(JSON.parse(outputText), rawText);
-  } catch {
-    throw new Error('AI 返回的简历数据不是合法 JSON。');
+  const parsed = extractJsonFromOutput(outputText);
+
+  if (!parsed || typeof parsed !== 'object') {
+    const preview = outputText.length > 200 ? outputText.slice(0, 200) + '…' : outputText;
+    throw new Error(
+      `AI 返回的简历数据不是合法 JSON。\n\n返回内容预览：${preview}`,
+    );
   }
+
+  return parseResumePayload(parsed, rawText);
 }
 
 async function requestViaOpenAiCompatible(
@@ -690,11 +731,16 @@ async function requestViaOpenAiCompatible(
     throw new Error('OpenAI 兼容协议未返回结构化工具结果。');
   }
 
-  try {
-    return parseResumePayload(JSON.parse(argumentsText), rawText);
-  } catch {
-    throw new Error('OpenAI 兼容协议返回的工具参数不是合法 JSON。');
+  const parsed = extractJsonFromOutput(argumentsText);
+
+  if (!parsed || typeof parsed !== 'object') {
+    const preview = argumentsText.length > 200 ? argumentsText.slice(0, 200) + '…' : argumentsText;
+    throw new Error(
+      `OpenAI 兼容协议返回的工具参数不是合法 JSON。\n\n返回内容预览：${preview}`,
+    );
   }
+
+  return parseResumePayload(parsed, rawText);
 }
 
 async function requestViaAnthropicCompatible(
@@ -714,7 +760,7 @@ async function requestViaAnthropicCompatible(
     },
     body: JSON.stringify({
       model: config.model.trim(),
-      max_tokens: 4000,
+      max_tokens: 16000,
       system: systemPrompt,
       messages: [
         {
