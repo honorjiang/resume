@@ -1079,7 +1079,12 @@ export async function extractResumeMaterials(
 
   const userPrompt = [
     'Extract all achievement materials, project actions/outcomes, skills, and highlights from this resume.',
-    'For each item, set evidenceLevel based on whether it contains measurable metrics.',
+    '',
+    'For each extracted item:',
+    '- Assign the correct category: "achievement", "project", "skill", or "highlight".',
+    '- Set evidenceLevel to "low" (strong) if it has metrics, "medium" if descriptive, "high" (weak) if vague.',
+    '- Include all evidence checklist fields (score, hasMetric, hasContext, hasAction, hasResult, missing).',
+    '- Use path format like "experience.0.achievements.2" or "projects.1.outcomes.0".',
     '',
     'Resume JSON:',
     resumeJson,
@@ -1176,8 +1181,13 @@ export async function extractResumeInterviewPrompts(
 ): Promise<ResumeInterviewPrompt[]> {
   const userPrompt = [
     'Generate interview follow-up prompts from this resume.',
-    'Focus on claims in experience, project outcomes, highlights, and quantified achievements.',
-    'Return only claims that are useful for interview validation.',
+    '',
+    'Focus on claims in experience achievements, project outcomes, highlights, and quantified results.',
+    'For each claim:',
+    '- Extract the exact source text from the resume.',
+    '- Generate 2-4 probing questions that test baseline, scope, personal contribution, tradeoffs, and result validity.',
+    '- Include the evidence score fields.',
+    '- Only return claims that are substantial enough to probe in a real interview.',
     '',
     'Resume JSON:',
     resumeJson,
