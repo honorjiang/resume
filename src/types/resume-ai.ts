@@ -60,6 +60,7 @@ export type ResumeAiTextActionParams = {
   fieldLabel?: string;
   contextHint?: string;
   format?: ResumeAiTextFormat;
+  outputLanguage?: string;
 };
 
 export type ResumeAiEditedField = {
@@ -81,6 +82,7 @@ export type ResumeAtsCheckRequest = {
   resumeJson: string;
   targetRole?: string;
   jobDescription?: string;
+  outputLanguage?: string;
 };
 
 export type ResumeJobOptimizationRequest = ResumeAtsCheckRequest & {

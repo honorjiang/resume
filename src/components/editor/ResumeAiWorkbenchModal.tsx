@@ -33,9 +33,14 @@ import type {
   ResumeMaterialItem,
   ResumeVersion,
 } from '../../types/resume-workbench';
+import { useToast } from '../ui/Toast';
+import { isAbortError } from '../../lib/ai/aiRequest';
+import { ApiKeyWarning } from '../ui/ApiKeyWarning';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Modal } from '../ui/Modal';
+import { useLanguageMode } from '../../hooks/useLanguageMode';
+import type { UIDictKey } from '../../lib/i18n/uiDict';
 
 type ResumeAiWorkbenchModalProps = {
   isOpen: boolean;
@@ -66,6 +71,9 @@ type ResumeAiWorkbenchModalProps = {
   onDeleteVersion: (versionId: string) => void;
   onExtractMaterials: () => Promise<ResumeMaterialItem[]>;
   onExtractInterviewPrompts: () => Promise<ResumeInterviewPrompt[]>;
+  /** Cancel in-progress AI call; actionKey matches App runWithAbort registration */
+  onAbortAiAction: (actionKey: string) => void;
+  onClearApiKey: () => void;
 };
 
 type WorkbenchTab = 'config' | 'versions' | 'evidence' | 'interview' | 'ats';
@@ -82,16 +90,7 @@ type ConnectionState =
   | { status: 'success'; message: string }
   | { status: 'error'; message: string };
 
-const WORKBENCH_TABS: Array<{
-  id: WorkbenchTab;
-  label: string;
-}> = [
-  { id: 'config', label: '配置' },
-  { id: 'versions', label: '版本' },
-  { id: 'evidence', label: '证据' },
-  { id: 'interview', label: '追问' },
-  { id: 'ats', label: 'ATS' },
-];
+const WORKBENCH_TAB_IDS: WorkbenchTab[] = ['config', 'versions', 'evidence', 'interview', 'ats'];
 
 const PROVIDER_OPTIONS: Array<{
   value: ResumeImportProvider;
@@ -162,7 +161,11 @@ function inferSection(sectionText: string) {
   return { sectionId: 'hero', sectionLabel: '首页摘要' };
 }
 
-function buildAtsChecklist(report: ResumeAtsReport | null): AtsChecklistItem[] {
+function buildAtsChecklist(
+  report: ResumeAtsReport | null,
+  t: (key: UIDictKey) => string,
+  sectionLabelMap: Record<string, string>,
+): AtsChecklistItem[] {
   if (!report) {
     return [];
   }
@@ -174,7 +177,7 @@ function buildAtsChecklist(report: ResumeAtsReport | null): AtsChecklistItem[] {
       title: risk.title,
       detail: risk.detail,
       severity: risk.severity,
-      sectionLabel: section.sectionLabel,
+      sectionLabel: sectionLabelMap[section.sectionLabel] || section.sectionLabel,
       sectionId: section.sectionId,
       source: 'risk' as const,
     };
@@ -187,7 +190,7 @@ function buildAtsChecklist(report: ResumeAtsReport | null): AtsChecklistItem[] {
       title: suggestion.title,
       detail: suggestion.detail,
       severity: suggestion.priority,
-      sectionLabel: section.sectionLabel,
+      sectionLabel: sectionLabelMap[section.sectionLabel] || section.sectionLabel,
       sectionId: section.sectionId,
       source: 'suggestion' as const,
     };
@@ -195,10 +198,10 @@ function buildAtsChecklist(report: ResumeAtsReport | null): AtsChecklistItem[] {
 
   const keywordItems = report.missingKeywords.map((keyword, index) => ({
     id: `keyword-${index}-${keyword}`,
-    title: `补充关键词：${keyword}`,
-    detail: '在摘要、技能或相关经历中自然补充该关键词。',
+    title: t('ai.supplementKeywordPrefix') + keyword,
+    detail: t('ai.supplementKeywordDetail'),
     severity: 'medium' as const,
-    sectionLabel: '技能矩阵',
+    sectionLabel: sectionLabelMap['技能矩阵'] || '技能矩阵',
     sectionId: 'skills',
     source: 'keyword' as const,
   }));
@@ -213,9 +216,9 @@ function scrollToSection(sectionId: string) {
   });
 }
 
-function versionDateLabel(value: string) {
+function versionDateLabel(value: string, locale: string) {
   try {
-    return new Date(value).toLocaleString('zh-CN', {
+    return new Date(value).toLocaleString(locale, {
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
@@ -226,9 +229,9 @@ function versionDateLabel(value: string) {
   }
 }
 
-function runTimeLabel(value: string) {
+function runTimeLabel(value: string, locale: string) {
   try {
-    return new Date(value).toLocaleString('zh-CN', {
+    return new Date(value).toLocaleString(locale, {
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',
@@ -250,6 +253,8 @@ function getRunStatus({
   hasData,
   resumeFingerprint,
   emptyLabel,
+  t,
+  locale,
 }: {
   hasApiKey: boolean;
   isRunning: boolean;
@@ -257,51 +262,53 @@ function getRunStatus({
   hasData: boolean;
   resumeFingerprint: string;
   emptyLabel: string;
+  t: (key: UIDictKey) => string;
+  locale: string;
 }) {
   if (!hasApiKey) {
     return {
       tone: 'border-slate-200 bg-slate-50 text-slate-500',
-      label: '未配置 Key',
-      detail: '填写 API Key 后才能运行。',
+      label: t('ai.statusKeyMissing'),
+      detail: t('ai.statusKeyMissingDetail'),
     };
   }
 
   if (isRunning) {
     return {
       tone: 'border-sky-200 bg-sky-50 text-sky-700',
-      label: '运行中',
-      detail: '正在调用 AI 实时分析当前简历。',
+      label: t('ai.statusRunning'),
+      detail: t('ai.statusRunningDetail'),
     };
   }
 
   if (!meta) {
     return {
       tone: 'border-slate-200 bg-slate-50 text-slate-500',
-      label: '待运行',
-      detail: '点击按钮后才会生成结果。',
+      label: t('ai.statusPending'),
+      detail: t('ai.statusPendingDetail'),
     };
   }
 
   if (meta.snapshot !== resumeFingerprint) {
     return {
       tone: 'border-amber-200 bg-amber-50 text-amber-700',
-      label: '已过期',
-      detail: `结果生成于 ${runTimeLabel(meta.generatedAt)}，当前简历已变化。`,
+      label: t('ai.statusStale'),
+      detail: t('ai.statusStaleDetail').replace('{time}', runTimeLabel(meta.generatedAt, locale)),
     };
   }
 
   if (!hasData) {
     return {
       tone: 'border-amber-200 bg-amber-50 text-amber-700',
-      label: '空结果',
+      label: t('ai.statusEmpty'),
       detail: meta.emptyMessage || emptyLabel,
     };
   }
 
   return {
     tone: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-    label: '已生成',
-    detail: `基于当前简历，生成于 ${runTimeLabel(meta.generatedAt)}。`,
+    label: t('ai.statusDone'),
+    detail: t('ai.statusDoneDetail').replace('{time}', runTimeLabel(meta.generatedAt, locale)),
   };
 }
 
@@ -366,7 +373,47 @@ export function ResumeAiWorkbenchModal({
   onDeleteVersion,
   onExtractMaterials,
   onExtractInterviewPrompts,
+  onAbortAiAction,
+  onClearApiKey,
 }: ResumeAiWorkbenchModalProps) {
+  const toast = useToast();
+  const { t, mode } = useLanguageMode();
+  const locale = mode === 'zh' ? 'zh-CN' : mode === 'en' ? 'en-US' : mode;
+
+  const tabLabels = useMemo<Record<WorkbenchTab, string>>(
+    () => ({
+      config: t('ai.tabConfig'),
+      versions: t('ai.tabVersions'),
+      evidence: t('ai.tabEvidence'),
+      interview: t('ai.tabInterview'),
+      ats: t('ai.tabAts'),
+    }),
+    [t],
+  );
+
+  const sectionLabelMap = useMemo<Record<string, string>>(
+    () => ({
+      '技能矩阵': t('section.skills'),
+      '工作经历': t('section.experience'),
+      '教育背景': t('section.education'),
+      '证书荣誉': t('section.certificates'),
+      '联系信息': t('section.contact'),
+      '首页摘要': t('section.hero'),
+    }),
+    [t],
+  );
+
+  const severityLabels = useMemo<Record<ResumeAtsRiskLevel, string>>(
+    () => ({
+      high: t('ai.severityHigh'),
+      medium: t('ai.severityMedium'),
+      low: t('ai.severityLow'),
+    }),
+    [t],
+  );
+
+  const listSeparator = mode === 'zh' ? '、' : ', ';
+
   const [activeTab, setActiveTab] = useState<WorkbenchTab>('config');
   const [targetRole, setTargetRole] = useState('');
   const [jobDescription, setJobDescription] = useState('');
@@ -376,10 +423,9 @@ export function ResumeAiWorkbenchModal({
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [acceptedPatchKeys, setAcceptedPatchKeys] = useState<string[]>([]);
   const [completedChecklistIds, setCompletedChecklistIds] = useState<string[]>([]);
-  const [feedback, setFeedback] = useState<string | null>(null);
   const [connectionState, setConnectionState] = useState<ConnectionState>({
     status: 'idle',
-    message: '尚未测试连接。',
+    message: '',
   });
   const [isCheckingAts, setIsCheckingAts] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -399,7 +445,10 @@ export function ResumeAiWorkbenchModal({
     isApplying ||
     isExtractingMaterials ||
     isExtractingInterview;
-  const checklistItems = useMemo(() => buildAtsChecklist(atsReport), [atsReport]);
+  const checklistItems = useMemo(
+    () => buildAtsChecklist(atsReport, t, sectionLabelMap),
+    [atsReport, t, sectionLabelMap],
+  );
   const selectedPatches = useMemo(
     () =>
       optimizationResult?.patches.filter((patch) =>
@@ -426,7 +475,9 @@ export function ResumeAiWorkbenchModal({
     meta: atsMeta,
     hasData: Boolean(atsReport),
     resumeFingerprint,
-    emptyLabel: 'AI 未返回 ATS 检查结果。',
+    emptyLabel: t('ai.jobDescriptionEmpty'),
+    t,
+    locale,
   });
   const optimizationStatus = getRunStatus({
     hasApiKey,
@@ -434,7 +485,9 @@ export function ResumeAiWorkbenchModal({
     meta: optimizationMeta,
     hasData: Boolean(optimizationResult?.patches.length),
     resumeFingerprint,
-    emptyLabel: 'AI 没有发现需要改写的字段。',
+    emptyLabel: t('ai.jobOptimizationEmpty'),
+    t,
+    locale,
   });
   const materialsStatus = getRunStatus({
     hasApiKey,
@@ -442,7 +495,9 @@ export function ResumeAiWorkbenchModal({
     meta: materialsMeta,
     hasData: Boolean(materials.length),
     resumeFingerprint,
-    emptyLabel: 'AI 未从当前简历中提取到可评分素材。',
+    emptyLabel: t('ai.materialsEmpty'),
+    t,
+    locale,
   });
   const interviewStatus = getRunStatus({
     hasApiKey,
@@ -450,23 +505,30 @@ export function ResumeAiWorkbenchModal({
     meta: interviewMeta,
     hasData: Boolean(interviewPrompts.length),
     resumeFingerprint,
-    emptyLabel: 'AI 未从当前简历中找到适合追问的经历。',
+    emptyLabel: t('ai.interviewEmpty'),
+    t,
+    locale,
   });
+
+  // Update idle connection message when language changes
+  const idleMessage = t('ai.connectionNotTested');
+  if (connectionState.status === 'idle' && connectionState.message !== idleMessage) {
+    setConnectionState({ status: 'idle', message: idleMessage });
+  }
 
   async function handleTestConnection() {
     if (!hasApiKey) {
       setConnectionState({
         status: 'error',
-        message: '请先填写 API Key。',
+        message: t('ai.keyRequired'),
       });
       return;
     }
 
     try {
-      setFeedback(null);
       setConnectionState({
         status: 'testing',
-        message: '正在测试模型连接...',
+        message: t('ai.testingConnection'),
       });
       const result = await onTestConnection();
       setConnectionState({
@@ -476,19 +538,18 @@ export function ResumeAiWorkbenchModal({
     } catch (error) {
       setConnectionState({
         status: 'error',
-        message: error instanceof Error ? error.message : '连接测试失败，请检查配置。',
+        message: error instanceof Error ? error.message : t('ai.connectionTestFailed'),
       });
     }
   }
 
   async function handleAtsCheck() {
     if (!hasApiKey) {
-      setFeedback('请先填写 API Key，再运行 ATS 检查。');
+      toast.warning(t('ai.setKeyFirst'));
       return;
     }
 
     try {
-      setFeedback(null);
       setIsCheckingAts(true);
       const nextReport = await onRunAtsCheck({
         targetRole: targetRole.trim() || undefined,
@@ -501,7 +562,8 @@ export function ResumeAiWorkbenchModal({
       });
       setCompletedChecklistIds([]);
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : 'ATS 检查失败，请重试。');
+      if (isAbortError(error)) return;
+      toast.error(t('ai.atsFailed'), error instanceof Error ? error.message : t('ai.retryLater'));
     } finally {
       setIsCheckingAts(false);
     }
@@ -509,12 +571,11 @@ export function ResumeAiWorkbenchModal({
 
   async function handleExtractMaterials() {
     if (!hasApiKey) {
-      setFeedback('请先填写 API Key，再提取证据强度评分。');
+      toast.warning(t('ai.setKeyFirstExtract'));
       return;
     }
 
     try {
-      setFeedback(null);
       setIsExtractingMaterials(true);
       const result = await onExtractMaterials();
       setMaterials(result);
@@ -523,15 +584,17 @@ export function ResumeAiWorkbenchModal({
         snapshot: resumeFingerprint,
         emptyMessage: result.length
           ? undefined
-          : '当前简历没有足够具体的成果、项目动作或亮点可供评分。',
+          : t('ai.insufficientMaterials'),
       });
-      setFeedback(
+      toast.success(
         result.length
-          ? `AI 已提取 ${result.length} 条证据素材。`
-          : 'AI 未提取到证据素材，请补充更具体的经历或项目成果后重试。',
+          ? t('ai.extractedCount').replace('{n}', String(result.length))
+          : t('ai.noExtracted'),
+        result.length ? undefined : t('ai.noExtractedDetail'),
       );
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : 'AI 证据提取失败，请重试。');
+      if (isAbortError(error)) return;
+      toast.error(t('ai.extractFailed'), error instanceof Error ? error.message : t('ai.retryLater'));
     } finally {
       setIsExtractingMaterials(false);
     }
@@ -539,12 +602,11 @@ export function ResumeAiWorkbenchModal({
 
   async function handleExtractInterviewPrompts() {
     if (!hasApiKey) {
-      setFeedback('请先填写 API Key，再生成面试追问。');
+      toast.warning(t('ai.setKeyFirstInterview'));
       return;
     }
 
     try {
-      setFeedback(null);
       setIsExtractingInterview(true);
       const result = await onExtractInterviewPrompts();
       setInterviewPrompts(result);
@@ -553,15 +615,17 @@ export function ResumeAiWorkbenchModal({
         snapshot: resumeFingerprint,
         emptyMessage: result.length
           ? undefined
-          : '当前简历没有足够明确的成果声明可生成追问。',
+          : t('ai.noInterviewStatements'),
       });
-      setFeedback(
+      toast.success(
         result.length
-          ? `AI 已生成 ${result.length} 组面试追问。`
-          : 'AI 未生成面试追问，请补充更明确的成果、数据或项目描述后重试。',
+          ? t('ai.interviewGeneratedCount').replace('{n}', String(result.length))
+          : t('ai.noInterviewGenerated'),
+        result.length ? undefined : t('ai.noInterviewGeneratedDetail'),
       );
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : 'AI 面试追问生成失败，请重试。');
+      if (isAbortError(error)) return;
+      toast.error(t('ai.interviewGenerateFailed'), error instanceof Error ? error.message : t('ai.retryLater'));
     } finally {
       setIsExtractingInterview(false);
     }
@@ -569,17 +633,16 @@ export function ResumeAiWorkbenchModal({
 
   async function handleOptimization() {
     if (!hasApiKey) {
-      setFeedback('请先填写 API Key，再生成岗位版本。');
+      toast.warning(t('ai.setKeyFirstOptimize'));
       return;
     }
 
     if (!targetRole.trim()) {
-      setFeedback('请先填写目标岗位，再运行岗位定向优化。');
+      toast.warning(t('ai.setKeyFirstOptimizeTarget'));
       return;
     }
 
     try {
-      setFeedback(null);
       setIsOptimizing(true);
       const nextResult = await onRunJobOptimization({
         targetRole: targetRole.trim(),
@@ -592,12 +655,11 @@ export function ResumeAiWorkbenchModal({
         snapshot: resumeFingerprint,
         emptyMessage: nextResult.patches.length
           ? undefined
-          : 'AI 没有发现值得应用的岗位定向改写。',
+          : t('ai.noWorthwhileRewrites'),
       });
     } catch (error) {
-      setFeedback(
-        error instanceof Error ? error.message : '岗位定向优化失败，请重试。',
-      );
+      if (isAbortError(error)) return;
+      toast.error(t('ai.optimizeFailed'), error instanceof Error ? error.message : t('ai.retryLater'));
     } finally {
       setIsOptimizing(false);
     }
@@ -605,7 +667,7 @@ export function ResumeAiWorkbenchModal({
 
   function handleApplyOptimization() {
     if (!optimizationResult || !selectedPatches.length) {
-      setFeedback('请至少接受一条优化建议。');
+      toast.warning(t('ai.acceptOnePatch'));
       return;
     }
 
@@ -620,7 +682,7 @@ export function ResumeAiWorkbenchModal({
         jobDescription,
         atsScore: atsReport?.overallScore,
       });
-      setFeedback(`已应用 ${selectedPatches.length} 条建议，并保存为岗位版本。`);
+      toast.success(t('ai.appliedOptimization').replace('{n}', String(selectedPatches.length)));
       window.setTimeout(() => {
         onClose();
       }, 220);
@@ -650,14 +712,14 @@ export function ResumeAiWorkbenchModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="AI 助手"
-      description="统一管理 AI 配置、ATS 检查、岗位版本和素材库。"
+      title={t('nav.aiAssistant')}
+      description={t('ai.modalDescription')}
     >
       <div className="flex max-h-[92vh] flex-col">
         <div className="border-b border-[var(--line)] px-6 py-4 pr-16">
-          <p className="text-base font-semibold text-slate-950">AI 简历工作台</p>
+          <p className="text-base font-semibold text-slate-950">{t('ai.title')}</p>
           <p className="mt-1 text-sm text-slate-500">
-            生成岗位版本、审核 AI 改动、检查证据强度，并模拟面试追问。
+            {t('ai.description')}
           </p>
         </div>
 
@@ -665,32 +727,30 @@ export function ResumeAiWorkbenchModal({
           <div className="border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm font-medium text-amber-800">
             <div className="flex items-center gap-2">
               <AlertCircle className="size-4 shrink-0" />
-              <span>请先填写 API Key；AI 模块会在点击按钮后实时分析当前简历。</span>
+              <span>{t('ai.apiKeyMissing')}</span>
             </div>
           </div>
-        ) : null}
-
-        {feedback ? (
-          <div className="border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm font-medium text-amber-800">
-            {feedback}
+        ) : (
+          <div className="border-b border-amber-200 px-6 py-3">
+            <ApiKeyWarning onClear={onClearApiKey} />
           </div>
-        ) : null}
+        )}
 
         <div className="border-b border-slate-200 bg-white px-4 py-3 lg:hidden">
           <div className="flex gap-2 overflow-x-auto">
-            {WORKBENCH_TABS.map((tab) => (
+            {WORKBENCH_TAB_IDS.map((tabId) => (
               <button
-                key={tab.id}
+                key={tabId}
                 type="button"
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => setActiveTab(tabId)}
                 className={[
                   'min-h-10 shrink-0 rounded-full border px-4 text-sm font-medium transition',
-                  activeTab === tab.id
+                  activeTab === tabId
                     ? 'border-slate-950 bg-slate-950 text-white'
                     : 'border-slate-200 bg-slate-50 text-slate-600',
                 ].join(' ')}
               >
-                {tab.label}
+                {tabLabels[tabId]}
               </button>
             ))}
           </div>
@@ -701,7 +761,7 @@ export function ResumeAiWorkbenchModal({
             <div className="grid gap-4 lg:grid-cols-2">
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Provider
+                  {t('ai.provider')}
                 </span>
                 <select
                   value={config.provider}
@@ -722,7 +782,7 @@ export function ResumeAiWorkbenchModal({
 
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  API Key
+                  {t('ai.apiKey')}
                 </span>
                 <input
                   type="password"
@@ -735,7 +795,7 @@ export function ResumeAiWorkbenchModal({
 
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Model
+                  {t('ai.model')}
                 </span>
                 <input
                   type="text"
@@ -748,7 +808,7 @@ export function ResumeAiWorkbenchModal({
 
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Base URL
+                  {t('ai.baseUrl')}
                 </span>
                 <input
                   type="text"
@@ -770,10 +830,10 @@ export function ResumeAiWorkbenchModal({
               <div>
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                   <ShieldCheck className="size-4 text-slate-500" />
-                  AI 配置与隐私
+                  {t('ai.privacyTitle')}
                 </div>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  点击测试连接只验证模型是否能返回结构化 JSON；点击 ATS、提取评分、生成追问或岗位版本时，才会把当前简历内容发送到你配置的模型服务。
+                  {t('ai.privacyDetail')}
                 </p>
                 <p
                   className={[
@@ -804,7 +864,7 @@ export function ResumeAiWorkbenchModal({
                   )
                 }
               >
-                {connectionState.status === 'testing' ? '测试中...' : '测试连接'}
+                {connectionState.status === 'testing' ? t('ai.testing') : t('ai.testConnection')}
               </Button>
             </div>
           </Card>
@@ -813,26 +873,26 @@ export function ResumeAiWorkbenchModal({
             <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  目标岗位
+                  {t('ai.targetRole')}
                 </span>
                 <input
                   type="text"
                   value={targetRole}
                   onChange={(event) => setTargetRole(event.target.value)}
-                  placeholder="例如：数据分析师 / 前端开发 / 产品经理"
+                  placeholder={t('ai.targetRolePlaceholder')}
                   className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
                 />
               </label>
 
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  岗位描述 / 关键词
+                  {t('ai.jobDescription')}
                 </span>
                 <textarea
                   value={jobDescription}
                   rows={5}
                   onChange={(event) => setJobDescription(event.target.value)}
-                  placeholder="粘贴 JD、关键要求、核心技能、业务场景。"
+                  placeholder={t('ai.jobDescriptionPlaceholder')}
                   className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition focus:border-slate-400 focus:bg-white"
                 />
               </label>
@@ -840,38 +900,46 @@ export function ResumeAiWorkbenchModal({
 
             <div className="mt-5 flex flex-wrap gap-3">
               <Button
-                variant="secondary"
+                variant={isCheckingAts ? 'ghost' : 'secondary'}
                 size="sm"
                 onClick={() => {
+                  if (isCheckingAts) {
+                    onAbortAiAction('ats-check');
+                    return;
+                  }
                   void handleAtsCheck();
                 }}
-                disabled={isBusy || !hasApiKey}
+                disabled={(isBusy && !isCheckingAts) || (!isCheckingAts && !hasApiKey)}
                 icon={
                   isCheckingAts ? (
-                    <LoaderCircle className="size-4 animate-spin" />
+                    <X className="size-4" />
                   ) : (
                     <ScanSearch className="size-4" />
                   )
                 }
               >
-                {isCheckingAts ? '分析中...' : 'ATS 检查'}
+                {isCheckingAts ? t('ai.cancelCheck') : t('ai.atsCheck')}
               </Button>
               <Button
-                variant="primary"
+                variant={isOptimizing ? 'ghost' : 'primary'}
                 size="sm"
                 onClick={() => {
+                  if (isOptimizing) {
+                    onAbortAiAction('job-optimization');
+                    return;
+                  }
                   void handleOptimization();
                 }}
-                disabled={isBusy || !hasApiKey}
+                disabled={(isBusy && !isOptimizing) || (!isOptimizing && !hasApiKey)}
                 icon={
                   isOptimizing ? (
-                    <LoaderCircle className="size-4 animate-spin" />
+                    <X className="size-4" />
                   ) : (
                     <BriefcaseBusiness className="size-4" />
                   )
                 }
               >
-                {isOptimizing ? '优化中...' : '生成岗位版本'}
+                {isOptimizing ? t('ai.cancelOptimization') : t('ai.generateRoleVersion')}
               </Button>
             </div>
 
@@ -886,15 +954,15 @@ export function ResumeAiWorkbenchModal({
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700">
                   <Layers3 className="size-4" />
-                  <span>岗位版本管理</span>
+                  <span>{t('ai.versionManager')}</span>
                 </div>
                 <p className="mt-3 text-sm leading-6 text-slate-600">
-                  每次接受岗位优化后都会保存一个本地版本，投递追踪可绑定版本和反馈。
+                  {t('ai.versionManagerDescription')}
                 </p>
               </div>
               <div className="rounded-2xl bg-slate-950 px-4 py-3 text-white">
                 <p className="text-xs uppercase tracking-[0.16em] text-white/60">
-                  Versions
+                  {t('ai.versions')}
                 </p>
                 <p className="mt-1 text-2xl font-semibold">{resumeVersions.length}</p>
               </div>
@@ -912,10 +980,10 @@ export function ResumeAiWorkbenchModal({
                         {version.name}
                       </p>
                       <p className="mt-1 text-xs text-slate-500">
-                        {versionDateLabel(version.createdAt)}
+                        {versionDateLabel(version.createdAt, locale)}
                         {version.atsScore ? ` · ATS ${version.atsScore}` : ''}
                         {version.patches.length
-                          ? ` · ${version.patches.length} 项改动`
+                          ? ` · ${t('ai.fieldChanges').replace('{n}', String(version.patches.length))}`
                           : ''}
                       </p>
                     </div>
@@ -927,7 +995,7 @@ export function ResumeAiWorkbenchModal({
                         onClick={() => setSelectedVersionId(version.id)}
                         icon={<GitCompareArrows className="size-4" />}
                       >
-                        对比
+                        {t('ai.compare')}
                       </Button>
                       <Button
                         type="button"
@@ -936,7 +1004,7 @@ export function ResumeAiWorkbenchModal({
                         onClick={() => onApplyVersion(version.id)}
                         icon={<Archive className="size-4" />}
                       >
-                        应用版本
+                        {t('ai.applyVersion')}
                       </Button>
                       <Button
                         type="button"
@@ -946,7 +1014,7 @@ export function ResumeAiWorkbenchModal({
                         className="text-rose-600 hover:text-rose-700"
                         icon={<Trash2 className="size-4" />}
                       >
-                        删除
+                        {t('ai.deleteVersion')}
                       </Button>
                     </div>
                   </div>
@@ -955,7 +1023,7 @@ export function ResumeAiWorkbenchModal({
 
               {!resumeVersions.length ? (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                  暂无岗位版本。运行岗位优化并接受建议后会自动生成。
+                  {t('ai.noVersions')}
                 </div>
               ) : null}
             </div>
@@ -966,21 +1034,21 @@ export function ResumeAiWorkbenchModal({
                   <div>
                     <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700">
                       <GitCompareArrows className="size-4" />
-                      <span>版本对比</span>
+                      <span>{t('ai.versionCompare')}</span>
                     </div>
                     <p className="mt-3 text-sm font-semibold text-slate-950">
                       {selectedVersion.name}
                     </p>
                     <p className="mt-1 text-xs leading-5 text-slate-500">
-                      {selectedVersion.patches.length} 项字段改动
+                      {t('ai.fieldChanges').replace('{n}', String(selectedVersion.patches.length))}
                       {selectedVersion.keywordCoverage.length
-                        ? ` · ${selectedVersion.keywordCoverage.length} 个增强关键词`
+                        ? ` · ${t('ai.enhancedKeywords').replace('{n}', String(selectedVersion.keywordCoverage.length))}`
                         : ''}
                     </p>
                   </div>
                   {versionSharedKeywords.length ? (
                     <div className="rounded-2xl bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
-                      与本次优化重合：{versionSharedKeywords.join('、')}
+                      {t('ai.sharedKeywords')}:{' '}{versionSharedKeywords.join(listSeparator)}
                     </div>
                   ) : null}
                 </div>
@@ -1015,15 +1083,15 @@ export function ResumeAiWorkbenchModal({
                       <div className="mt-3 grid gap-3 lg:grid-cols-2">
                         <div className="rounded-xl border border-slate-200 bg-white p-3">
                           <p className="text-xs font-semibold text-slate-400">
-                            当前简历
+                            {t('ai.currentResume')}
                           </p>
                           <p className="mt-2 text-sm leading-6 text-slate-600">
-                            {getValueAtPath(resume, patch.path) || '当前为空'}
+                            {getValueAtPath(resume, patch.path) || t('ai.currentEmpty')}
                           </p>
                         </div>
                         <div className="rounded-xl border border-emerald-200 bg-white p-3">
                           <p className="text-xs font-semibold text-slate-400">
-                            该版本
+                            {t('ai.thisVersion')}
                           </p>
                           <p className="mt-2 text-sm leading-6 text-slate-900">
                             {getValueAtPath(selectedVersion.resume, patch.path) ||
@@ -1035,7 +1103,7 @@ export function ResumeAiWorkbenchModal({
                   ))}
                   {!selectedVersion.patches.length ? (
                     <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                      该版本没有保存字段级改动。
+                      {t('ai.noVersionPatches')}
                     </div>
                   ) : null}
                 </div>
@@ -1049,10 +1117,10 @@ export function ResumeAiWorkbenchModal({
                 <div>
                   <div className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700">
                     <Sparkles className="size-4" />
-                    <span>AI 修改前后对比</span>
+                    <span>{t('ai.aiDiffTitle')}</span>
                   </div>
                   <p className="mt-4 text-sm font-semibold text-slate-900">
-                    目标岗位：{optimizationResult.targetRole || targetRole}
+                    {t('ai.targetRoleLabel')}:{' '}{optimizationResult.targetRole || targetRole}
                   </p>
                   {optimizationResult.summary ? (
                     <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
@@ -1069,7 +1137,7 @@ export function ResumeAiWorkbenchModal({
                       setAcceptedPatchKeys(optimizationResult.patches.map(patchKey))
                     }
                   >
-                    全选
+                    {t('ai.selectAll')}
                   </Button>
                   <Button
                     type="button"
@@ -1077,7 +1145,7 @@ export function ResumeAiWorkbenchModal({
                     size="sm"
                     onClick={() => setAcceptedPatchKeys([])}
                   >
-                    全部拒绝
+                    {t('ai.rejectAll')}
                   </Button>
                   <Button
                     variant="primary"
@@ -1087,8 +1155,8 @@ export function ResumeAiWorkbenchModal({
                     icon={<Check className="size-4" />}
                   >
                     {isApplying
-                      ? '应用中...'
-                      : `应用 ${selectedPatches.length} 条并保存版本`}
+                      ? t('ai.applying')
+                      : t('ai.applyOptimization').replace('{n}', String(selectedPatches.length))}
                   </Button>
                 </div>
               </div>
@@ -1147,14 +1215,14 @@ export function ResumeAiWorkbenchModal({
                             )
                           }
                         >
-                          {accepted ? '已接受' : '已拒绝'}
+                          {accepted ? t('ai.accepted') : t('ai.rejected')}
                         </Button>
                       </div>
 
                       <div className="mt-4 grid gap-3 lg:grid-cols-2">
                         <div className="rounded-2xl border border-slate-200 bg-white p-3">
                           <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
-                            当前内容
+                            {t('ai.currentValue')}
                           </p>
                           <p className="mt-2 text-sm leading-6 text-slate-600">
                             {patch.currentValue}
@@ -1162,7 +1230,7 @@ export function ResumeAiWorkbenchModal({
                         </div>
                         <div className="rounded-2xl border border-sky-200 bg-white p-3">
                           <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
-                            建议改写
+                            {t('ai.suggestedValue')}
                           </p>
                           <p className="mt-2 text-sm leading-6 text-slate-900">
                             {patch.suggestedValue}
@@ -1181,28 +1249,39 @@ export function ResumeAiWorkbenchModal({
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700">
                   <BarChart3 className="size-4" />
-                  <span>可信度 / 证据强度评分</span>
+                  <span>{t('ai.evidenceTitle')}</span>
                 </div>
                 <p className="mt-3 text-sm leading-6 text-slate-600">
-                  点击后由 AI 从当前简历实时提取素材，并按数据、上下文、个人动作和结果四项评分。
+                  {t('ai.evidenceDescription')}
                 </p>
               </div>
               <Button
-                variant="secondary"
+                variant={isExtractingMaterials ? 'ghost' : 'secondary'}
                 size="sm"
                 onClick={() => {
+                  if (isExtractingMaterials) {
+                    onAbortAiAction('extract-materials');
+                    return;
+                  }
                   void handleExtractMaterials();
                 }}
-                disabled={isBusy || !hasApiKey}
+                disabled={
+                  (isBusy && !isExtractingMaterials) ||
+                  (!isExtractingMaterials && !hasApiKey)
+                }
                 icon={
                   isExtractingMaterials ? (
-                    <LoaderCircle className="size-4 animate-spin" />
+                    <X className="size-4" />
                   ) : (
                     <Target className="size-4" />
                   )
                 }
               >
-                {isExtractingMaterials ? '提取中...' : materials.length ? 'AI 重新提取' : 'AI 提取评分'}
+                {isExtractingMaterials
+                  ? t('ai.cancelExtract')
+                  : materials.length
+                    ? t('ai.reextractEvidence')
+                    : t('ai.extractEvidence')}
               </Button>
             </div>
 
@@ -1214,25 +1293,25 @@ export function ResumeAiWorkbenchModal({
               <>
                 <div className="mt-5 grid grid-cols-4 gap-2 text-center">
                   <div className="rounded-2xl bg-slate-50 px-3 py-2">
-                    <p className="text-[11px] text-slate-400">素材</p>
+                    <p className="text-[11px] text-slate-400">{t('ai.itemsLabel')}</p>
                     <p className="mt-0.5 text-lg font-semibold text-slate-950">
                       {materials.length}
                     </p>
                   </div>
                   <div className="rounded-2xl bg-emerald-50 px-3 py-2">
-                    <p className="text-[11px] text-emerald-600">强证据</p>
+                    <p className="text-[11px] text-emerald-600">{t('ai.strongLabel')}</p>
                     <p className="mt-0.5 text-lg font-semibold text-emerald-700">
                       {strongMaterials.length}
                     </p>
                   </div>
                   <div className="rounded-2xl bg-amber-50 px-3 py-2">
-                    <p className="text-[11px] text-amber-600">可用</p>
+                    <p className="text-[11px] text-amber-600">{t('ai.usableLabel')}</p>
                     <p className="mt-0.5 text-lg font-semibold text-amber-700">
                       {mediumMaterials.length}
                     </p>
                   </div>
                   <div className="rounded-2xl bg-rose-50 px-3 py-2">
-                    <p className="text-[11px] text-rose-600">待加强</p>
+                    <p className="text-[11px] text-rose-600">{t('ai.weakLabel')}</p>
                     <p className="mt-0.5 text-lg font-semibold text-rose-700">
                       {weakMaterials.length}
                     </p>
@@ -1254,7 +1333,7 @@ export function ResumeAiWorkbenchModal({
                               severityClass(item.evidenceLevel),
                             ].join(' ')}
                           >
-                            {evidence.score} 分
+                            {evidence.score} {t('ai.scoreUnit')}
                           </span>
                           <span className="text-xs text-slate-400">
                             {item.sourceLabel}
@@ -1268,10 +1347,10 @@ export function ResumeAiWorkbenchModal({
                         </p>
                         <div className="mt-3 flex flex-wrap gap-2">
                           {[
-                            ['数据', evidence.hasMetric],
-                            ['上下文', evidence.hasContext],
-                            ['动作', evidence.hasAction],
-                            ['结果', evidence.hasResult],
+                            [t('ai.dimensionMetric'), evidence.hasMetric],
+                            [t('ai.dimensionContext'), evidence.hasContext],
+                            [t('ai.dimensionAction'), evidence.hasAction],
+                            [t('ai.dimensionResult'), evidence.hasResult],
                           ].map(([label, passed]) => (
                             <span
                               key={String(label)}
@@ -1288,7 +1367,7 @@ export function ResumeAiWorkbenchModal({
                         </div>
                         {evidence.missing.length ? (
                           <p className="mt-3 text-xs leading-5 text-rose-600">
-                            待补：{evidence.missing.join('、')}
+                            {t('ai.missingDimension')}:{' '}{evidence.missing.join(listSeparator)}
                           </p>
                         ) : null}
                         <div className="mt-4 flex flex-wrap gap-2">
@@ -1299,7 +1378,7 @@ export function ResumeAiWorkbenchModal({
                             onClick={() => scrollToSection(inferSection(item.path).sectionId)}
                             icon={<MapPin className="size-4" />}
                           >
-                            定位
+                            {t('ai.locate')}
                           </Button>
                           <Button
                             type="button"
@@ -1308,7 +1387,7 @@ export function ResumeAiWorkbenchModal({
                             onClick={() => copyText(item.content)}
                             icon={<Copy className="size-4" />}
                           >
-                            复制
+                            {t('ai.copy')}
                           </Button>
                         </div>
                       </div>
@@ -1318,7 +1397,7 @@ export function ResumeAiWorkbenchModal({
               </>
             ) : (
               <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                填写 API Key 后点击“AI 提取评分”，这里才会显示 AI 分析结果。
+                {t('ai.evidenceEmptyMessage')}
               </div>
             )}
           </Card>
@@ -1328,28 +1407,39 @@ export function ResumeAiWorkbenchModal({
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700">
                   <MessageSquareText className="size-4" />
-                  <span>面试追问模拟</span>
+                  <span>{t('ai.interviewTitle')}</span>
                 </div>
                 <p className="mt-3 text-sm leading-6 text-slate-600">
-                  点击后由 AI 基于当前简历生成追问，优先暴露数据口径、业务背景、个人贡献和结果复用性。
+                  {t('ai.interviewDescription')}
                 </p>
               </div>
               <Button
-                variant="secondary"
+                variant={isExtractingInterview ? 'ghost' : 'secondary'}
                 size="sm"
                 onClick={() => {
+                  if (isExtractingInterview) {
+                    onAbortAiAction('extract-interview');
+                    return;
+                  }
                   void handleExtractInterviewPrompts();
                 }}
-                disabled={isBusy || !hasApiKey}
+                disabled={
+                  (isBusy && !isExtractingInterview) ||
+                  (!isExtractingInterview && !hasApiKey)
+                }
                 icon={
                   isExtractingInterview ? (
-                    <LoaderCircle className="size-4 animate-spin" />
+                    <X className="size-4" />
                   ) : (
                     <MessageSquareText className="size-4" />
                   )
                 }
               >
-                {isExtractingInterview ? '生成中...' : interviewPrompts.length ? 'AI 重新生成' : 'AI 生成追问'}
+                {isExtractingInterview
+                  ? t('ai.cancelGenerateInterview')
+                  : interviewPrompts.length
+                    ? t('ai.regenerateInterview')
+                    : t('ai.generateInterview')}
               </Button>
             </div>
 
@@ -1362,7 +1452,7 @@ export function ResumeAiWorkbenchModal({
                 <div className="mt-5 inline-flex rounded-2xl bg-slate-950 px-4 py-3 text-white">
                   <div>
                     <p className="text-xs uppercase tracking-[0.16em] text-white/60">
-                      Questions
+                      {t('ai.questions')}
                     </p>
                     <p className="mt-1 text-2xl font-semibold">
                       {interviewPrompts.reduce(
@@ -1386,7 +1476,7 @@ export function ResumeAiWorkbenchModal({
                             severityClass(evidenceLevelFromScore(item.evidence.score)),
                           ].join(' ')}
                         >
-                          证据 {item.evidence.score}
+                          {t('ai.evidenceScore')} {item.evidence.score}
                         </span>
                         <span className="text-xs text-slate-400">
                           {item.sourceLabel}
@@ -1414,7 +1504,7 @@ export function ResumeAiWorkbenchModal({
                           }
                           icon={<Copy className="size-4" />}
                         >
-                          复制追问
+                          {t('ai.copyQuestions')}
                         </Button>
                         <Button
                           type="button"
@@ -1423,7 +1513,7 @@ export function ResumeAiWorkbenchModal({
                           onClick={() => scrollToSection('experience')}
                           icon={<MapPin className="size-4" />}
                         >
-                          定位经历
+                          {t('ai.locateExperience')}
                         </Button>
                       </div>
                     </div>
@@ -1432,7 +1522,7 @@ export function ResumeAiWorkbenchModal({
               </>
             ) : (
               <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                填写 API Key 后点击“AI 生成追问”，这里才会显示 AI 面试追问。
+                {t('ai.interviewEmptyMessage')}
               </div>
             )}
           </Card>
@@ -1444,15 +1534,15 @@ export function ResumeAiWorkbenchModal({
                 <div>
                   <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700">
                     <ClipboardCheck className="size-4" />
-                    <span>ATS 检查清单</span>
+                    <span>{t('ai.atsTitle')}</span>
                   </div>
                   <p className="mt-3 text-sm leading-6 text-slate-600">
-                    {atsReport.summary || '已生成 ATS 分析结果。'}
+                    {atsReport.summary || t('ai.atsGeneratedSummary')}
                   </p>
                 </div>
                 <div className="rounded-3xl bg-slate-950 px-5 py-4 text-white">
                   <p className="text-xs uppercase tracking-[0.18em] text-white/60">
-                    Score
+                    {t('ai.score')}
                   </p>
                   <p className="mt-1 text-3xl font-semibold">{atsReport.overallScore}</p>
                 </div>
@@ -1462,28 +1552,30 @@ export function ResumeAiWorkbenchModal({
                 <StatusPill {...atsStatus} />
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
                   <p className="font-semibold">
-                    {completedChecklistIds.length}/{checklistItems.length} 已处理
+                    {t('ai.completed')
+                      .replace('{done}', String(completedChecklistIds.length))
+                      .replace('{total}', String(checklistItems.length))}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
-                    可逐项标记完成并定位到简历区块。
+                    {t('ai.completedDetail')}
                   </p>
                 </div>
               </div>
 
               <div className="mt-6 grid gap-4 lg:grid-cols-2">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">优势</p>
+                  <p className="text-sm font-semibold text-slate-900">{t('ai.strengths')}</p>
                   <ul className="mt-3 grid gap-2 text-sm leading-6 text-slate-700">
                     {atsReport.strengths.map((strength) => (
                       <li key={strength}>- {strength}</li>
                     ))}
                     {!atsReport.strengths.length ? (
-                      <li className="text-slate-400">暂无明显优势摘要。</li>
+                      <li className="text-slate-400">{t('ai.noStrengths')}</li>
                     ) : null}
                   </ul>
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">缺失关键词</p>
+                  <p className="text-sm font-semibold text-slate-900">{t('ai.missingKeywords')}</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {atsReport.missingKeywords.map((keyword) => (
                       <span
@@ -1494,7 +1586,7 @@ export function ResumeAiWorkbenchModal({
                       </span>
                     ))}
                     {!atsReport.missingKeywords.length ? (
-                      <span className="text-sm text-slate-400">暂无明显缺失。</span>
+                      <span className="text-sm text-slate-400">{t('ai.noMissingKeywords')}</span>
                     ) : null}
                   </div>
                 </div>
@@ -1526,7 +1618,7 @@ export function ResumeAiWorkbenchModal({
                                   ? 'border-emerald-500 bg-emerald-500 text-white'
                                   : 'border-slate-300 bg-white text-transparent',
                               ].join(' ')}
-                              aria-label={completed ? '标记未完成' : '标记完成'}
+                              aria-label={completed ? t('ai.markUndone') : t('ai.markDone')}
                             >
                               <Check className="size-3.5" />
                             </button>
@@ -1539,7 +1631,7 @@ export function ResumeAiWorkbenchModal({
                                 severityClass(item.severity),
                               ].join(' ')}
                             >
-                              {item.severity}
+                              {severityLabels[item.severity]}
                             </span>
                           </div>
                           <p className="mt-2 text-sm leading-6 text-slate-600">
@@ -1565,13 +1657,13 @@ export function ResumeAiWorkbenchModal({
               <>
                 <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700">
                   <ClipboardCheck className="size-4" />
-                  <span>ATS 检查清单</span>
+                  <span>{t('ai.atsTitle')}</span>
                 </div>
                 <div className="mt-5">
                   <StatusPill {...atsStatus} />
                 </div>
                 <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                  填写 API Key 后点击“ATS 检查”，这里才会显示 AI 生成的检查清单。
+                  {t('ai.atsEmptyMessage')}
                 </div>
               </>
             )}

@@ -1,0 +1,195 @@
+/**
+ * 中文→英文词库
+ *
+ * 用途：渲染层兜底翻译，专给 resume 字段里的"专有"中文（公司、岗位、地点、学历、关键术语等）。
+ * 特点：
+ *   - 仅在 zh→en 切换时生效
+ *   - 命中整段/整短语 → 返回英文
+ *   - 不命中 → 整段回退原文（不出现"半中半英"）
+ *   - 不写进 ResumeProfile 数据，纯渲染层装饰
+ *
+ * 维护：可以从 src/data/resume.ts 与 src/data/resume-en.ts 反向抽取；按需扩充。
+ */
+
+export const zhEnGlossary: Record<string, string> = {
+  // —— 角色 / 岗位 ——
+  'AI 技术总监': 'AI Technical Director',
+  'AI 负责人': 'AI Lead',
+  'AI 研发负责人': 'Head of AI R&D',
+  '智能平台主管': 'Intelligent Platform Lead',
+  '智能平台负责人': 'Intelligent Platform Lead',
+  '技术负责人': 'Tech Lead',
+  '高级工程师': 'Senior Engineer',
+  '产品负责人': 'Product Lead',
+  '架构负责人': 'Architecture Lead',
+  '产品 & 技术负责人': 'Product & Tech Lead',
+  '架构 & 推进负责人': 'Architecture & Delivery Lead',
+  '技术决策 & 资源协调': 'Tech Decision & Resource Coordination',
+  '发起人 & 架构负责人': 'Founder & Architecture Lead',
+
+  // —— 行业 / 领域 ——
+  '大模型平台': 'LLM Platform',
+  '大模型中台': 'LLM Platform',
+  '企业级大模型中台': 'Enterprise LLM Platform',
+  '智能体编排': 'Agent Orchestration',
+  'AI Agent 流程自动化平台': 'AI Agent Workflow Automation Platform',
+  '智能知识库与问答助手': 'Intelligent Knowledge Base & Q&A Assistant',
+  '检索增强生成': 'Retrieval-Augmented Generation',
+
+  // —— 地点 ——
+  '上海': 'Shanghai',
+  '北京': 'Beijing',
+  '深圳': 'Shenzhen',
+  '杭州': 'Hangzhou',
+  '广州': 'Guangzhou',
+  '南京': 'Nanjing',
+  '可远程协作': 'Open to Remote',
+  '上海 / 可远程协作': 'Shanghai / Open to Remote',
+
+  // —— 学历 / 专业 ——
+  '本科': "Bachelor's",
+  '硕士': "Master's",
+  '博士': 'PhD',
+  '信息管理与信息系统': 'Information Management & Information System',
+
+  // —— 公司名 ——
+  '星帆科技': 'Xingfan Tech',
+  '澜观互动': 'Languan Interactive',
+  '北岸数字': 'Beian Digital',
+  '南京邮电大学': 'Nanjing University of Posts and Telecommunications',
+
+  // —— 颁发机构 ——
+  '国家版权局': 'National Copyright Administration of China',
+  'PMI': 'PMI',
+  'Amazon Web Services': 'Amazon Web Services',
+
+  // —— 证书名 ——
+  '企业级 AI 中台软件著作权': 'Enterprise AI Platform Software Copyright',
+  '智能知识库问答系统软件著作权': 'Intelligent Knowledge Base Q&A System Software Copyright',
+  'AI Agent 流程自动化平台软件著作权': 'AI Agent Workflow Automation Platform Software Copyright',
+  'PMP 项目管理专业人士认证': 'PMP Project Management Professional',
+  'AWS Solutions Architect – Associate': 'AWS Solutions Architect – Associate',
+
+  // —— 技能分类（短文本，常独立出现）——
+  'AI 战略与管理': 'AI Strategy & Management',
+  '大模型平台': 'LLM Platform',
+  '系统架构与工程': 'System Architecture & Engineering',
+  '数据与知识工程': 'Data & Knowledge Engineering',
+  '研发效能与交付': 'R&D Efficiency & Delivery',
+  '技术栈与工具': 'Tech Stack & Tools',
+
+  // —— 常用技能短语（单条 items）——
+  'AI 战略规划': 'AI Strategic Planning',
+  '技术路线设计': 'Tech Roadmap Design',
+  'ROI 评估与预算管理': 'ROI Evaluation & Budget Management',
+  '团队搭建与梯队建设': 'Team Building & Talent Pipeline',
+  '跨部门协同': 'Cross-functional Collaboration',
+  '高层汇报与方案答辩': 'Executive Reporting & Solution Pitching',
+  '大模型接入与网关': 'LLM Integration & Gateway',
+  'Prompt 工程与版本管理': 'Prompt Engineering & Versioning',
+  'RAG 架构设计': 'RAG Architecture Design',
+  '向量检索与重排': 'Vector Retrieval & Reranking',
+  'Agent 工作流编排': 'Agent Workflow Orchestration',
+  '模型评测与效果优化': 'Model Evaluation & Optimization',
+  '分布式架构设计': 'Distributed Architecture',
+  '微服务治理': 'Microservice Governance',
+  '高并发与高可用': 'High Concurrency & High Availability',
+  '缓存策略': 'Caching Strategy',
+  '可观测性体系': 'Observability',
+  '灰度发布与故障应急': 'Canary Release & Incident Response',
+  '数据建模与治理': 'Data Modeling & Governance',
+  '知识处理链路': 'Knowledge Processing Pipeline',
+  '多租户权限隔离': 'Multi-tenant Isolation',
+  '召回与重排优化': 'Recall & Reranking',
+  '效果评估与闭环': 'Performance Evaluation & Feedback Loop',
+  '数据安全与合规': 'Data Security & Compliance',
+  '研发流程优化': 'R&D Process Optimization',
+  '需求拆解与项目管理': 'Requirement Breakdown & Project Management',
+  '技术评审机制': 'Technical Review Process',
+  '质量保障体系': 'Quality Assurance',
+  '故障复盘': 'Incident Postmortem',
+  '团队文化建设': 'Team Culture Building',
+  'AI 工具链': 'AI Toolchain',
+  'LangChain / LlamaIndex': 'LangChain / LlamaIndex',
+  'Docker / K8s': 'Docker / K8s',
+  'MySQL / PostgreSQL': 'MySQL / PostgreSQL',
+
+  // —— 项目 / 经验常用标签 ——
+  'AI 战略': 'AI Strategy',
+  '平台架构': 'Platform Architecture',
+  '团队管理': 'Team Management',
+  '模型部署': 'Model Deployment',
+  '智能平台': 'Intelligent Platform',
+  '架构设计': 'Architecture Design',
+  '研发管理': 'R&D Management',
+  '数据治理': 'Data Governance',
+  '系统设计': 'System Design',
+  '服务治理': 'Service Governance',
+  '团队带教': 'Mentoring',
+  '大模型中台': 'LLM Platform',
+  'RAG': 'RAG',
+  'Agent': 'Agent',
+  '模型服务': 'Model Serving',
+  '知识库': 'Knowledge Base',
+  '智能问答': 'Intelligent Q&A',
+  '向量检索': 'Vector Retrieval',
+  '权限治理': 'Permission Governance',
+  'AI Agent': 'AI Agent',
+  '工作流编排': 'Workflow Orchestration',
+  '工具调用': 'Tool Calling',
+  '自动化平台': 'Automation Platform',
+  '推理服务': 'Inference Service',
+  '成本优化': 'Cost Optimization',
+  '稳定性建设': 'Reliability Engineering',
+  '平台监控': 'Platform Monitoring',
+
+  // —— 联系信息标签 ——
+  '邮箱': 'Email',
+  '手机': 'Phone',
+  'GitHub': 'GitHub',
+  '个人站点': 'Personal Site',
+  '联系': 'Contact',
+
+  // —— 短语（在 summary/achievements 中高频出现）——
+  '主导': 'Led ',
+  '负责': 'Owned ',
+  '搭建': 'Built ',
+  '推动': 'Drove ',
+  '完成': 'Delivered ',
+  '建立': 'Established ',
+  '实现': 'Implemented ',
+  '完成架构升级': 'Delivered architecture upgrade',
+  '可用性': 'availability',
+  '延迟': 'latency',
+  '提升至': 'raised to ',
+  '从 0 到 1': 'from zero to one',
+  '千万级': '10M+',
+  '亿级': '100M+',
+  '3 年': '3 years',
+  '日均': 'daily avg',
+  '10+': '10+',
+  '30+ 人': '30+ people',
+  '12 人': '12 people',
+  '30 余人': '30+ people',
+  '30+ 人': '30+ people',
+  '2 周': '2 weeks',
+  '3 个月': '3 months',
+  '个月': ' months',
+  'P99': 'P99',
+  '99.95%': '99.95%',
+  '200%': '200%',
+  '40%': '40%',
+  '60%': '60%',
+  '80%': '80%',
+  '90%': '90%',
+  '95%': '95%',
+  'AI': 'AI',
+  'PoC': 'PoC',
+  'ROI': 'ROI',
+  'CTO': 'CTO',
+  'RBAC': 'RBAC',
+  'IT': 'IT',
+  'ERP': 'ERP',
+  'DAG': 'DAG',
+  'Token': 'Token',
+};

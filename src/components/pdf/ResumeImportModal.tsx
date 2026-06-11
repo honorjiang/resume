@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useRef } from 'react';
 import { formatFileSize } from '../../lib/format';
+import { useLanguageMode } from '../../hooks/useLanguageMode';
 import type {
   ResumeImportAiConfig,
   ResumeImportProvider,
@@ -33,50 +34,20 @@ type ResumeImportModalProps = {
 const PROVIDER_OPTIONS: Array<{
   value: ResumeImportProvider;
   label: string;
-  hint: string;
 }> = [
   {
     value: 'openai-responses',
     label: 'OpenAI Responses',
-    hint: '原生 Responses API，可直接发送 PDF 文件。',
   },
   {
     value: 'openai-compatible',
     label: 'OpenAI Compatible',
-    hint: '',
   },
   {
     value: 'anthropic-compatible',
     label: 'Anthropic Compatible',
-    hint: '适合 Claude-format / Anthropic 兼容网关，依赖本地提取文本。',
   },
 ];
-
-function statusText(status: ResumeImportStatus) {
-  switch (status) {
-    case 'extracting':
-      return '正在准备 PDF 文件与本地文本预览';
-    case 'parsing':
-      return '正在调用 AI 提取结构化简历';
-    case 'ready':
-      return '提取完成，请确认后应用到当前页面';
-    case 'error':
-      return '导入失败';
-    default:
-      return '可选上传 PDF，通过 AI 提取结构化简历并替换当前会话内容。';
-  }
-}
-
-function providerHelpText(provider: ResumeImportProvider) {
-  switch (provider) {
-    case 'openai-compatible':
-      return '';
-    case 'anthropic-compatible':
-      return '使用 Anthropic Messages 兼容协议，不直接上传 PDF，依赖本地提取出的文本。';
-    default:
-      return '使用 OpenAI Responses API，可直接把 PDF 发给模型，并附带本地文本作为辅助上下文。';
-  }
-}
 
 function modelPlaceholder(provider: ResumeImportProvider) {
   switch (provider) {
@@ -109,23 +80,47 @@ export function ResumeImportModal({
   onReset,
   onSelectFile,
 }: ResumeImportModalProps) {
+  const { t } = useLanguageMode();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const isBusy = status === 'extracting' || status === 'parsing';
-  const providerHint =
-    PROVIDER_OPTIONS.find((option) => option.value === config.provider)?.hint ?? '';
-  const providerHelp = providerHelpText(config.provider);
+
+  const statusMessage = (() => {
+    switch (status) {
+      case 'extracting':
+        return t('importer.extracting');
+      case 'parsing':
+        return t('importer.parsing');
+      case 'ready':
+        return t('importer.ready');
+      case 'error':
+        return t('importer.error');
+      default:
+        return t('importer.statusHint');
+    }
+  })();
+
+  const providerHelp = (() => {
+    switch (config.provider) {
+      case 'openai-compatible':
+        return t('importer.openaiCompatibleHint');
+      case 'anthropic-compatible':
+        return t('importer.anthropicHint');
+      default:
+        return t('importer.openaiResponsesHint');
+    }
+  })();
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="导入 PDF 简历"
-      description="不导入也可使用内置 resume.ts 预览和导出 PDF；导入仅覆盖当前页面显示。"
+      title={t('importer.title')}
+      description={t('importer.description')}
     >
       <div className="flex max-h-[92vh] flex-col">
         <div className="border-b border-[var(--line)] px-6 py-4 pr-16">
-          <p className="text-base font-semibold text-slate-950">导入 PDF 简历</p>
-          <p className="mt-1 text-sm text-slate-500">{statusText(status)}</p>
+          <p className="text-base font-semibold text-slate-950">{t('importer.title')}</p>
+          <p className="mt-1 text-sm text-slate-500">{statusMessage}</p>
         </div>
 
         <div className="flex-1 space-y-6 overflow-y-auto bg-slate-50/80 px-6 py-6">
@@ -133,9 +128,9 @@ export function ResumeImportModal({
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">AI 导入配置</p>
+                  <p className="text-sm font-semibold text-slate-900">{t('importer.importConfig')}</p>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
-                    API Key 仅保存在当前浏览器会话中。
+                    {t('importer.keySavedInSession')}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
@@ -153,7 +148,7 @@ export function ResumeImportModal({
                       )
                     }
                   >
-                    {isBusy ? '处理中...' : '选择 PDF'}
+                    {isBusy ? t('importer.processing') : t('importer.choosePdf')}
                   </Button>
                   <Button
                     variant="ghost"
@@ -163,7 +158,7 @@ export function ResumeImportModal({
                     onClick={onReset}
                     icon={<RotateCcw className="size-4" />}
                   >
-                    清空结果
+                    {t('importer.clearResult')}
                   </Button>
                 </div>
               </div>
@@ -242,8 +237,7 @@ export function ResumeImportModal({
                 <p className="text-sm leading-6 text-slate-600">{providerHelp}</p>
               ) : null}
               <p className="text-sm leading-6 text-slate-600">
-                {providerHint ? `${providerHint} ` : ''}
-                支持最大 10MB 的 PDF，并尽量保留原文语言。导入结果只影响当前会话，不会修改仓库里的 resume.ts。
+                {t('importer.importDetail')}
               </p>
             </div>
 
@@ -271,8 +265,8 @@ export function ResumeImportModal({
                 <div className="min-w-0">
                   <p className="text-sm font-semibold">
                     {status === 'extracting'
-                      ? '正在读取 PDF 与准备上下文'
-                      : '正在调用 AI 提取结构化简历'}
+                      ? t('importer.extracting')
+                      : t('importer.parsing')}
                   </p>
                 </div>
               </div>
@@ -292,60 +286,60 @@ export function ResumeImportModal({
                   <div>
                     <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
                       <CheckCircle2 className="size-4" />
-                      <span>已生成会话简历草稿</span>
+                      <span>{t('importer.generatedSessionDraft')}</span>
                     </div>
                     <p className="mt-4 text-sm font-semibold text-slate-900">
                       {review.file.name}
                     </p>
                     <p className="mt-1 text-sm text-slate-500">
-                      {formatFileSize(review.file.size)} · 模型 {review.meta.model}
+                      {formatFileSize(review.file.size)} · {review.meta.model}
                     </p>
                   </div>
                   <Button variant="primary" size="sm" onClick={onApply}>
-                    应用到当前页面
+                    {t('importer.applyToCurrent')}
                   </Button>
                 </div>
               </Card>
 
               <div className="grid gap-4 lg:grid-cols-2">
                 <Card className="bg-white">
-                  <p className="text-sm font-semibold text-slate-900">基本信息</p>
+                  <p className="text-sm font-semibold text-slate-900">{t('importer.basicInfo')}</p>
                   <dl className="mt-4 grid gap-3 text-sm">
                     <div>
-                      <dt className="text-slate-500">姓名</dt>
+                      <dt className="text-slate-500">{t('importer.fieldName')}</dt>
                       <dd className="mt-1 text-slate-900">
-                        {review.resume.basics.name || '未识别'}
+                        {review.resume.basics.name || t('importer.notRecognized')}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-slate-500">职位标题</dt>
+                      <dt className="text-slate-500">{t('importer.fieldTitle')}</dt>
                       <dd className="mt-1 text-slate-900">
-                        {review.resume.basics.title || '未识别'}
+                        {review.resume.basics.title || t('importer.notRecognized')}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-slate-500">摘要</dt>
+                      <dt className="text-slate-500">{t('importer.fieldSummary')}</dt>
                       <dd className="mt-1 text-slate-700">
-                        {review.resume.basics.summary || '未识别'}
+                        {review.resume.basics.summary || t('importer.notRecognized')}
                       </dd>
                     </div>
                   </dl>
                 </Card>
 
                 <Card className="bg-white">
-                  <p className="text-sm font-semibold text-slate-900">解析结果概览</p>
+                  <p className="text-sm font-semibold text-slate-900">{t('importer.summaryPreview')}</p>
                   <ul className="mt-4 grid gap-3 text-sm text-slate-700">
-                    <li>工作经历：{review.resume.experience.length} 条</li>
-                    <li>项目经历：{review.resume.projects.length} 条</li>
-                    <li>技能分组：{review.resume.skills.length} 组</li>
-                    <li>教育经历：{review.resume.education.length} 条</li>
-                    <li>证书荣誉：{review.resume.certificates.length} 条</li>
-                    <li>联系方式：{review.resume.contactLinks.length} 条</li>
+                    <li>{t('importer.summaryExperience')}: {review.resume.experience.length}</li>
+                    <li>{t('importer.summaryProjects')}: {review.resume.projects.length}</li>
+                    <li>{t('importer.summarySkills')}: {review.resume.skills.length}</li>
+                    <li>{t('importer.summaryEducation')}: {review.resume.education.length}</li>
+                    <li>{t('importer.summaryCertificates')}: {review.resume.certificates.length}</li>
+                    <li>{t('importer.summaryContacts')}: {review.resume.contactLinks.length}</li>
                   </ul>
                   <p className="mt-4 text-xs leading-6 text-slate-500">
                     {review.meta.usedLocalTextPreview
-                      ? '已附带本地文本预览作为辅助上下文。'
-                      : '本次未生成本地文本预览，结果完全来自 AI 对 PDF 的理解。'}
+                      ? t('importer.usedLocalPreview')
+                      : t('importer.noLocalPreview')}
                   </p>
                 </Card>
               </div>
@@ -356,7 +350,7 @@ export function ResumeImportModal({
                     <AlertCircle className="mt-0.5 size-5 shrink-0 text-amber-600" />
                     <div>
                       <p className="text-sm font-semibold text-amber-800">
-                        需要人工确认
+                        {t('importer.manualConfirmTitle')}
                       </p>
                       <ul className="mt-3 grid gap-2 text-sm leading-6 text-amber-800">
                         {review.draft.warnings.map((warning) => (
@@ -371,7 +365,7 @@ export function ResumeImportModal({
               {review.draft.rawText ? (
                 <Card className="bg-white">
                   <p className="text-sm font-semibold text-slate-900">
-                    本地文本预览
+                    {t('importer.rawTextTitle')}
                   </p>
                   <pre className="mt-4 max-h-64 overflow-auto whitespace-pre-wrap rounded-2xl bg-slate-950 p-4 text-xs leading-6 text-slate-100">
                     {review.draft.rawText.slice(0, 4000)}

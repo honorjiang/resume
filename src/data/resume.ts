@@ -2,7 +2,7 @@ import type { ResumeProfile } from '../types/resume';
 
 export const resumeProfile: ResumeProfile = {
   basics: {
-    name: '陈叙',
+    name: '陈大锤',
     title: 'AI 技术总监',
     subtitle: '从 0 到 1 构建企业级 AI 平台，驱动大模型落地与商业化闭环',
     summary:

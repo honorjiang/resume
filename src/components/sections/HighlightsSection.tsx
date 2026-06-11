@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { getHighlightIcon } from '../../lib/icons';
 import type { Highlight } from '../../types/resume';
+import { useLanguageMode } from '../../hooks/useLanguageMode';
 import { EditorRemoveButton, EditorSectionActions } from '../editor/EditorActions';
 import { createHighlightDraft } from '../editor/resume-draft-factories';
 import { EditableText } from '../editor/EditableText';
@@ -14,19 +15,20 @@ type HighlightsSectionProps = {
 
 export function HighlightsSection({ items }: HighlightsSectionProps) {
   const { isEditing, updateResume } = useResumeEditor();
+  const { t } = useLanguageMode();
 
   return (
     <Section
       id="highlights"
-      eyebrow="亮点"
-      title="核心亮点"
+      eyebrow={t('section.highlightsEyebrow')}
+      title={t('section.highlights')}
       className="bg-slate-50/80"
     >
       <EditorSectionActions
         isEditing={isEditing}
-        addLabel="新增亮点卡片"
+        addLabel={t('editor.addHighlight')}
         isEmpty={!items.length}
-        emptyMessage="当前没有亮点卡片，先新增一项。"
+        emptyMessage={t('editor.highlightEmpty')}
         onAdd={() =>
           updateResume((draft) => {
             draft.highlights.push(createHighlightDraft());
@@ -40,7 +42,7 @@ export function HighlightsSection({ items }: HighlightsSectionProps) {
 
           return (
             <motion.div
-              key={item.title || index}
+              key={`highlight-${index}`}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, amount: 0.2 }}
@@ -71,7 +73,7 @@ export function HighlightsSection({ items }: HighlightsSectionProps) {
                           draft.highlights[index].metric = value;
                         })
                       }
-                      placeholder="亮点"
+                      placeholder={t('editor.placeholderHighlightTitle')}
                       displayAs="p"
                       displayClassName="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400"
                       inputClassName="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500"

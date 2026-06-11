@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import type { CertificateItem } from '../../types/resume';
+import { useLanguageMode } from '../../hooks/useLanguageMode';
 import { EditorRemoveButton, EditorSectionActions } from '../editor/EditorActions';
 import { EditableText } from '../editor/EditableText';
 import { createCertificateDraft } from '../editor/resume-draft-factories';
@@ -14,19 +15,20 @@ type CertificatesSectionProps = {
 
 export function CertificatesSection({ items }: CertificatesSectionProps) {
   const { isEditing, updateResume } = useResumeEditor();
+  const { t } = useLanguageMode();
 
   return (
     <Section
       id="certificates"
-      eyebrow="证书"
-      title="证书与荣誉"
+      eyebrow={t('section.certificatesEyebrow')}
+      title={t('section.certificates')}
       className="bg-slate-50/80"
     >
       <EditorSectionActions
         isEditing={isEditing}
-        addLabel="新增证书卡片"
+        addLabel={t('editor.addCertificate')}
         isEmpty={!items.length}
-        emptyMessage="当前没有证书卡片，先新增一项。"
+        emptyMessage={t('editor.certificateEmpty')}
         onAdd={() =>
           updateResume((draft) => {
             draft.certificates.push(createCertificateDraft());
@@ -37,7 +39,7 @@ export function CertificatesSection({ items }: CertificatesSectionProps) {
       <div className="grid gap-4 md:grid-cols-2">
         {items.map((item, index) => (
           <motion.div
-            key={`${item.name}-${index}`}
+            key={`certificate-${index}`}
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.25 }}
@@ -78,7 +80,7 @@ export function CertificatesSection({ items }: CertificatesSectionProps) {
                         draft.certificates[index].issuer = value || undefined;
                       })
                     }
-                    placeholder="颁发机构"
+                    placeholder={t('editor.issuerPlaceholder')}
                     multiline
                     rows={3}
                     displayAs="p"
@@ -97,7 +99,7 @@ export function CertificatesSection({ items }: CertificatesSectionProps) {
                       draft.certificates[index].date = value || undefined;
                     })
                   }
-                  placeholder="年份"
+                  placeholder={t('editor.datePlaceholder')}
                   inputClassName="max-w-[7rem] text-sm text-slate-700"
                 />
               </div>

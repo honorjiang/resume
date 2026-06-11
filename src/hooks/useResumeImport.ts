@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ResumeProfile } from '../types/resume';
 import type {
   ResumeImportAiConfig,
   ResumeImportReview,
   ResumeImportStatus,
 } from '../types/resume-import';
+import { createAiRequest, isAbortError } from '../lib/ai/aiRequest';
+import { deobfuscate, obfuscate } from '../lib/secureStorage';
 
 const MAX_IMPORT_SIZE = 10 * 1024 * 1024;
 const STORAGE_KEY = 'resume-import-ai-config';
@@ -67,7 +69,7 @@ function loadInitialConfig() {
           : DEFAULT_AI_CONFIG.provider,
       apiKey:
         typeof parsed.apiKey === 'string'
-          ? parsed.apiKey
+          ? deobfuscate(parsed.apiKey) || parsed.apiKey // 支持旧明文和新混淆两种格式
           : DEFAULT_AI_CONFIG.apiKey,
       model:
         typeof parsed.model === 'string' && parsed.model.trim()
@@ -83,18 +85,22 @@ function loadInitialConfig() {
   }
 }
 
-export function useResumeImport(fallbackResume: ResumeProfile) {
+export function useResumeImport(fallbackResume: ResumeProfile, outputLanguage: string = 'zh') {
   const [status, setStatus] = useState<ResumeImportStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [review, setReview] = useState<ResumeImportReview | null>(null);
   const [config, setConfig] = useState<ResumeImportAiConfig>(loadInitialConfig);
+  const activeRequestRef = useRef<{ abort: () => void } | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
 
-    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+    window.sessionStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ ...config, apiKey: obfuscate(config.apiKey) }),
+    );
   }, [config]);
 
   const updateConfig = useCallback(
@@ -108,6 +114,8 @@ export function useResumeImport(fallbackResume: ResumeProfile) {
   );
 
   const resetImport = useCallback(() => {
+    activeRequestRef.current?.abort();
+    activeRequestRef.current = null;
     setStatus('idle');
     setError(null);
     setReview(null);
@@ -138,6 +146,9 @@ export function useResumeImport(fallbackResume: ResumeProfile) {
         setError('请先填写用于提取的模型名称。');
         return;
       }
+
+      // 取消上一次未完成的导入请求
+      activeRequestRef.current?.abort();
 
       try {
         setStatus('extracting');
@@ -175,12 +186,24 @@ export function useResumeImport(fallbackResume: ResumeProfile) {
 
         setStatus('parsing');
 
-        const draft = await extractResumeDraftWithAi({
-          config,
-          file,
-          fileData,
-          rawText,
-        });
+        // PDF 提取耗时较长，给 60s 超时
+        const handle = createAiRequest(
+          (signal) =>
+            extractResumeDraftWithAi({
+              config,
+              file,
+              fileData,
+              rawText,
+              signal,
+              outputLanguage,
+            }),
+          { timeoutMs: 60000 },
+        );
+        activeRequestRef.current = handle;
+        const draft = await handle.promise;
+        if (activeRequestRef.current === handle) {
+          activeRequestRef.current = null;
+        }
         const warnings = [...draft.warnings];
 
         if (!rawText) {
@@ -206,6 +229,12 @@ export function useResumeImport(fallbackResume: ResumeProfile) {
         });
         setStatus('ready');
       } catch (caughtError) {
+        if (isAbortError(caughtError)) {
+          // 用户主动取消或被新请求覆盖，恢复到 idle 状态
+          setStatus('idle');
+          setError(null);
+          return;
+        }
         setStatus('error');
         setError(
           caughtError instanceof Error
@@ -217,6 +246,13 @@ export function useResumeImport(fallbackResume: ResumeProfile) {
     [config, fallbackResume],
   );
 
+  const clearApiKey = useCallback(() => {
+    setConfig((current) => ({
+      ...current,
+      apiKey: '',
+    }));
+  }, []);
+
   return {
     config,
     error,
@@ -225,5 +261,6 @@ export function useResumeImport(fallbackResume: ResumeProfile) {
     review,
     status,
     updateConfig,
+    clearApiKey,
   };
 }

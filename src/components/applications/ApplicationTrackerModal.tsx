@@ -15,6 +15,8 @@ import {
   Upload,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import type { UIDictKey } from '../../lib/i18n/uiDict';
+import { useLanguageMode } from '../../hooks/useLanguageMode';
 import type { ResumeVersion } from '../../types/resume-workbench';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
@@ -58,35 +60,50 @@ type ApplicationTrackerModalProps = {
 
 const STORAGE_KEY = 'resume-application-tracker';
 
+const statusLabelMap: Record<ApplicationStatus, UIDictKey> = {
+  applied: 'tracker.statusApplied',
+  screening: 'tracker.statusScreening',
+  interview: 'tracker.statusInterview',
+  offer: 'tracker.statusOffer',
+  rejected: 'tracker.statusRejected',
+  withdrawn: 'tracker.statusWithdrawn',
+};
+
 const statusOptions: Array<{
   value: ApplicationStatus;
-  label: string;
   tone: string;
 }> = [
-  { value: 'applied', label: '已投递', tone: 'bg-slate-100 text-slate-700' },
-  { value: 'screening', label: '筛选中', tone: 'bg-blue-50 text-blue-700' },
-  { value: 'interview', label: '面试中', tone: 'bg-violet-50 text-violet-700' },
-  { value: 'offer', label: 'Offer', tone: 'bg-emerald-50 text-emerald-700' },
-  { value: 'rejected', label: '未通过', tone: 'bg-rose-50 text-rose-700' },
-  { value: 'withdrawn', label: '已放弃', tone: 'bg-amber-50 text-amber-700' },
+  { value: 'applied', tone: 'bg-slate-100 text-slate-700' },
+  { value: 'screening', tone: 'bg-blue-50 text-blue-700' },
+  { value: 'interview', tone: 'bg-violet-50 text-violet-700' },
+  { value: 'offer', tone: 'bg-emerald-50 text-emerald-700' },
+  { value: 'rejected', tone: 'bg-rose-50 text-rose-700' },
+  { value: 'withdrawn', tone: 'bg-amber-50 text-amber-700' },
 ];
+
+const filterLabelMap: Record<ApplicationFilter, UIDictKey> = {
+  all: 'tracker.filterAll',
+  active: 'tracker.filterActive',
+  interview: 'tracker.filterInterview',
+  offer: 'tracker.filterOffer',
+  closed: 'tracker.filterClosed',
+};
 
 const filterOptions: Array<{
   value: ApplicationFilter;
-  label: string;
 }> = [
-  { value: 'all', label: '全部' },
-  { value: 'active', label: '进行中' },
-  { value: 'interview', label: '面试' },
-  { value: 'offer', label: 'Offer' },
-  { value: 'closed', label: '已关闭' },
+  { value: 'all' },
+  { value: 'active' },
+  { value: 'interview' },
+  { value: 'offer' },
+  { value: 'closed' },
 ];
 
-const priorityLabels = {
-  high: '重点',
-  medium: '普通',
-  low: '观察',
-} as const;
+const priorityLabelMap: Record<string, UIDictKey> = {
+  high: 'tracker.priorityHigh',
+  medium: 'tracker.priorityMedium',
+  low: 'tracker.priorityLow',
+};
 
 function createId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -171,7 +188,7 @@ const STOP_WORDS = new Set([
 function collectTerms(text: string) {
   const normalized = text.toLowerCase();
   const latinTerms = normalized.match(/[a-z][a-z0-9+#.-]{2,}/g) ?? [];
-  const chineseTerms = normalized.match(/[\u4e00-\u9fa5]{2,8}/g) ?? [];
+  const chineseTerms = normalized.match(/[一-龥]{2,8}/g) ?? [];
 
   return [...latinTerms, ...chineseTerms].filter(
     (term) => !STOP_WORDS.has(term) && term.length >= 2,
@@ -198,7 +215,13 @@ function rate(part: number, total: number) {
   return Math.round((part / total) * 100);
 }
 
-function normalizeImportedApplications(value: unknown) {
+function normalizeImportedApplications(
+  value: unknown,
+  defaults?: { pendingConfirm?: string; websiteApply?: string },
+) {
+  const pendingConfirm = defaults?.pendingConfirm ?? '待确认';
+  const websiteApply = defaults?.websiteApply ?? '官网投递';
+
   const source = Array.isArray(value)
     ? value
     : value && typeof value === 'object' && Array.isArray((value as { applications?: unknown }).applications)
@@ -226,8 +249,8 @@ function normalizeImportedApplications(value: unknown) {
         id: textValue(item.id) || createId(),
         company,
         role,
-        location: textValue(item.location, '待确认') || '待确认',
-        channel: textValue(item.channel, '官网投递') || '官网投递',
+        location: textValue(item.location, pendingConfirm) || pendingConfirm,
+        channel: textValue(item.channel, websiteApply) || websiteApply,
         status: isApplicationStatus(item.status) ? item.status : 'applied',
         priority: isPriority(item.priority) ? item.priority : 'medium',
         appliedAt: textValue(item.appliedAt) || today(),
@@ -263,6 +286,7 @@ export function ApplicationTrackerModal({
   resumeVersions,
   onClose,
 }: ApplicationTrackerModalProps) {
+  const { t } = useLanguageMode();
   const [applications, setApplications] =
     useState<ApplicationRecord[]>(loadApplications);
   const [activeFilter, setActiveFilter] = useState<ApplicationFilter>('all');
@@ -319,7 +343,7 @@ export function ApplicationTrackerModal({
     for (const application of applications) {
       const key = application.resumeVersionId || 'unbound';
       const current = grouped.get(key) ?? {
-        name: application.resumeVersionName || '未绑定版本',
+        name: application.resumeVersionName || t('tracker.unbindVersion'),
         total: 0,
         interviews: 0,
         offers: 0,
@@ -343,7 +367,7 @@ export function ApplicationTrackerModal({
         return rightScore - leftScore || right.total - left.total;
       })
       .slice(0, 4);
-  }, [applications]);
+  }, [applications, t]);
 
   const liveApplications = useMemo(
     () => applications.filter((item) => !item.archived),
@@ -443,8 +467,8 @@ export function ApplicationTrackerModal({
       id: createId(),
       company: fieldValue(formData, 'company'),
       role: fieldValue(formData, 'role'),
-      location: fieldValue(formData, 'location') || '待确认',
-      channel: fieldValue(formData, 'channel') || '官网投递',
+      location: fieldValue(formData, 'location') || t('tracker.pendingConfirm'),
+      channel: fieldValue(formData, 'channel') || t('tracker.websiteApply'),
       status: 'applied',
       priority: (fieldValue(formData, 'priority') || 'medium') as
         | 'high'
@@ -486,8 +510,8 @@ export function ApplicationTrackerModal({
     updateApplication(editingId, {
       company,
       role,
-      location: fieldValue(formData, 'location') || '待确认',
-      channel: fieldValue(formData, 'channel') || '官网投递',
+      location: fieldValue(formData, 'location') || t('tracker.pendingConfirm'),
+      channel: fieldValue(formData, 'channel') || t('tracker.websiteApply'),
       priority: (fieldValue(formData, 'priority') || 'medium') as 'high' | 'medium' | 'low',
       appliedAt: fieldValue(formData, 'appliedAt') || today(),
       nextActionAt: fieldValue(formData, 'nextActionAt'),
@@ -525,8 +549,8 @@ export function ApplicationTrackerModal({
     const application = applications.find((item) => item.id === id);
     const confirmed = window.confirm(
       application
-        ? `确认删除「${application.company} · ${application.role}」？`
-        : '确认删除这条投递记录？',
+        ? `${t('tracker.deleteConfirmPrefix')}${application.company} · ${application.role}${t('tracker.deleteConfirmSuffix')}`
+        : t('tracker.deleteConfirmDefault'),
     );
 
     if (!confirmed) {
@@ -552,10 +576,13 @@ export function ApplicationTrackerModal({
   async function handleImportApplications(file: File) {
     try {
       const text = await file.text();
-      const importedApplications = normalizeImportedApplications(JSON.parse(text));
+      const importedApplications = normalizeImportedApplications(JSON.parse(text), {
+        pendingConfirm: t('tracker.pendingConfirm'),
+        websiteApply: t('tracker.websiteApply'),
+      });
 
       if (!importedApplications.length) {
-        window.alert('未识别到有效投递记录。');
+        window.alert(t('tracker.importEmpty'));
         return;
       }
 
@@ -578,12 +605,12 @@ export function ApplicationTrackerModal({
         return [...normalized, ...current];
       });
     } catch {
-      window.alert('导入失败，请确认文件是投递追踪导出的 JSON。');
+      window.alert(t('tracker.importFailed'));
     }
   }
 
   function handleClearApplications() {
-    if (!window.confirm('确认清空全部投递记录？此操作无法撤销。')) {
+    if (!window.confirm(t('tracker.clearAllConfirm'))) {
       return;
     }
 
@@ -597,8 +624,8 @@ export function ApplicationTrackerModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="投递追踪"
-      description="管理求职投递、面试阶段、后续动作与归档记录。"
+      title={t('tracker.title')}
+      description={t('tracker.description')}
     >
       <div className="flex max-h-[92vh] flex-col bg-slate-50/90">
         <div className="border-b border-[var(--line)] bg-white px-6 py-5 pr-16">
@@ -606,13 +633,13 @@ export function ApplicationTrackerModal({
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600">
                 <BriefcaseBusiness className="size-4" />
-                <span>Applications</span>
+                <span>{t('tracker.badge')}</span>
               </div>
               <h2 className="mt-3 text-xl font-semibold text-slate-950">
-                投递追踪
+                {t('tracker.titleHeadline')}
               </h2>
               <p className="mt-1 text-sm text-slate-500">
-                跟进公司、岗位、阶段和下一步动作，数据仅保存在当前浏览器。
+                {t('tracker.titleSubtitle')}
               </p>
             </div>
 
@@ -624,7 +651,7 @@ export function ApplicationTrackerModal({
                 onClick={() => importInputRef.current?.click()}
                 icon={<Upload className="size-4" />}
               >
-                导入
+                {t('tracker.import')}
               </Button>
               <Button
                 type="button"
@@ -634,7 +661,7 @@ export function ApplicationTrackerModal({
                 onClick={handleExportApplications}
                 icon={<Download className="size-4" />}
               >
-                导出
+                {t('tracker.export')}
               </Button>
               <Button
                 type="button"
@@ -642,7 +669,7 @@ export function ApplicationTrackerModal({
                 onClick={() => setIsAdding((current) => !current)}
                 icon={<Plus className="size-4" />}
               >
-                新增投递
+                {t('tracker.addApplication')}
               </Button>
             </div>
             <input
@@ -665,26 +692,26 @@ export function ApplicationTrackerModal({
           <div className="mb-6 rounded-3xl border border-slate-200 bg-white/80 p-4 shadow-sm">
             <div className="flex flex-wrap items-center gap-3">
               <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5">
-                <span className="text-[11px] text-slate-500">全部</span>
+                <span className="text-[11px] text-slate-500">{t('tracker.total')}</span>
                 <span className="text-xs font-semibold text-slate-800">
                   {stats.total}
                 </span>
               </div>
               <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1.5 text-[11px] font-medium text-blue-700">
                 <span className="size-1.5 rounded-full bg-blue-500" />
-                进行中 {stats.active}
+                {t('tracker.active')} {stats.active}
               </div>
               <div className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 px-3 py-1.5 text-[11px] font-medium text-violet-700">
                 <span className="size-1.5 rounded-full bg-violet-500" />
-                面试 {stats.interviews}
+                {t('tracker.interview')} {stats.interviews}
               </div>
               <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-[11px] font-medium text-emerald-700">
                 <span className="size-1.5 rounded-full bg-emerald-500" />
-                Offer {stats.offers}
+                {t('tracker.offer')} {stats.offers}
               </div>
               <div className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1.5 text-[11px] font-medium text-rose-700">
                 <span className="size-1.5 rounded-full bg-rose-500" />
-                待跟进 {stats.overdue}
+                {t('tracker.overdue')} {stats.overdue}
               </div>
 
               <div className="min-w-4 flex-1" />
@@ -696,7 +723,7 @@ export function ApplicationTrackerModal({
                 onClick={() => setShowArchived((current) => !current)}
                 icon={<Archive className="size-4" />}
               >
-                {showArchived ? '隐藏归档' : `显示归档 ${stats.archived}`}
+                {showArchived ? t('tracker.hideArchived') : t('tracker.showArchived').replace('{n}', String(stats.archived))}
               </Button>
             </div>
 
@@ -706,37 +733,37 @@ export function ApplicationTrackerModal({
                   <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
                     <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
                       <BarChart3 className="size-4" />
-                      投递最多
+                      {t('tracker.mostApplied')}
                     </div>
                     <p className="mt-2 truncate text-sm font-semibold text-slate-950">
-                      {versionInsights.mostUsed?.name || '暂无'}
+                      {versionInsights.mostUsed?.name || t('tracker.noData')}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
-                      {versionInsights.mostUsed?.total ?? 0} 次投递
+                      {t('tracker.noApplications').replace('{n}', String(versionInsights.mostUsed?.total ?? 0))}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-violet-200 bg-violet-50/70 p-4">
                     <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-violet-500">
                       <CheckCircle2 className="size-4" />
-                      面试率最高
+                      {t('tracker.bestInterviewRate')}
                     </div>
                     <p className="mt-2 truncate text-sm font-semibold text-slate-950">
-                      {versionInsights.bestInterview?.name || '暂无'}
+                      {versionInsights.bestInterview?.name || t('tracker.noData')}
                     </p>
                     <p className="mt-1 text-xs text-violet-700">
-                      {versionInsights.bestInterview?.interviewRate ?? 0}% 面试率
+                      {t('tracker.rateInterview').replace('{rate}', String(versionInsights.bestInterview?.interviewRate ?? 0))}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
                     <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-emerald-600">
                       <BriefcaseBusiness className="size-4" />
-                      Offer 表现
+                      {t('tracker.bestOffer')}
                     </div>
                     <p className="mt-2 truncate text-sm font-semibold text-slate-950">
-                      {versionInsights.bestOffer?.name || '暂无'}
+                      {versionInsights.bestOffer?.name || t('tracker.noData')}
                     </p>
                     <p className="mt-1 text-xs text-emerald-700">
-                      {versionInsights.bestOffer?.offerRate ?? 0}% Offer 率
+                      {t('tracker.rateOffer').replace('{rate}', String(versionInsights.bestOffer?.offerRate ?? 0))}
                     </p>
                   </div>
                 </div>
@@ -753,19 +780,19 @@ export function ApplicationTrackerModal({
                       <div className="mt-3 grid grid-cols-4 gap-2 text-center text-[11px]">
                         <div className="rounded-xl bg-white px-2 py-1.5 text-slate-600">
                           <p className="font-semibold text-slate-950">{version.total}</p>
-                          投递
+                          {t('tracker.detailApplied')}
                         </div>
                         <div className="rounded-xl bg-white px-2 py-1.5 text-violet-700">
                           <p className="font-semibold">{version.interviewRate}%</p>
-                          面试率
+                          {t('tracker.interview')}
                         </div>
                         <div className="rounded-xl bg-white px-2 py-1.5 text-emerald-700">
                           <p className="font-semibold">{version.offerRate}%</p>
-                          Offer
+                          {t('tracker.offer')}
                         </div>
                         <div className="rounded-xl bg-white px-2 py-1.5 text-sky-700">
                           <p className="font-semibold">{version.feedbackCount}</p>
-                          反馈
+                          {t('tracker.feedbackPrefix')}
                         </div>
                       </div>
                     </div>
@@ -779,7 +806,7 @@ export function ApplicationTrackerModal({
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
                   <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                     <Tags className="size-4 text-slate-500" />
-                    JD 高频关键词
+                    {t('tracker.keywordsTitle')}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {keywordInsights.map((item) => (
@@ -791,14 +818,14 @@ export function ApplicationTrackerModal({
                       </span>
                     ))}
                     {!keywordInsights.length ? (
-                      <span className="text-sm text-slate-400">暂无 JD 关键词。</span>
+                      <span className="text-sm text-slate-400">{t('tracker.noKeywords')}</span>
                     ) : null}
                   </div>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
                   <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                     <ClipboardList className="size-4 text-slate-500" />
-                    面试反馈主题
+                    {t('tracker.feedbackTitle')}
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {feedbackInsights.map((item) => (
@@ -810,7 +837,7 @@ export function ApplicationTrackerModal({
                       </span>
                     ))}
                     {!feedbackInsights.length ? (
-                      <span className="text-sm text-slate-400">暂无面试反馈。</span>
+                      <span className="text-sm text-slate-400">{t('tracker.noFeedback')}</span>
                     ) : null}
                   </div>
                 </div>
@@ -826,49 +853,49 @@ export function ApplicationTrackerModal({
               <div className="grid gap-4 lg:grid-cols-4">
                 <label className="block lg:col-span-2">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    公司
+                    {t('tracker.fieldCompany')}
                   </span>
                   <input
                     name="company"
                     required
-                    placeholder="例如：棱镜科技"
+                    placeholder={t('tracker.placeholderCompany')}
                     className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
                   />
                 </label>
                 <label className="block lg:col-span-2">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    岗位
+                    {t('tracker.fieldRole')}
                   </span>
                   <input
                     name="role"
                     required
-                    placeholder="例如：AI 产品负责人"
+                    placeholder={t('tracker.placeholderRole')}
                     className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
                   />
                 </label>
                 <label className="block">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    城市
+                    {t('tracker.fieldLocation')}
                   </span>
                   <input
                     name="location"
-                    placeholder="上海 / 远程"
+                    placeholder={t('tracker.placeholderLocation')}
                     className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
                   />
                 </label>
                 <label className="block">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    渠道
+                    {t('tracker.fieldChannel')}
                   </span>
                   <input
                     name="channel"
-                    placeholder="官网 / Boss / 内推"
+                    placeholder={t('tracker.placeholderChannel')}
                     className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
                   />
                 </label>
                 <label className="block">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    投递日期
+                    {t('tracker.fieldAppliedAt')}
                   </span>
                   <input
                     name="appliedAt"
@@ -879,7 +906,7 @@ export function ApplicationTrackerModal({
                 </label>
                 <label className="block">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    下一步
+                    {t('tracker.fieldNextActionAt')}
                   </span>
                   <input
                     name="nextActionAt"
@@ -889,48 +916,48 @@ export function ApplicationTrackerModal({
                 </label>
                 <label className="block">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    优先级
+                    {t('tracker.fieldPriority')}
                   </span>
                   <select
                     name="priority"
                     defaultValue="medium"
                     className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
                   >
-                    <option value="high">重点</option>
-                    <option value="medium">普通</option>
-                    <option value="low">观察</option>
+                    <option value="high">{t('tracker.priorityHigh')}</option>
+                    <option value="medium">{t('tracker.priorityMedium')}</option>
+                    <option value="low">{t('tracker.priorityLow')}</option>
                   </select>
                 </label>
                 <label className="block">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    联系人
+                    {t('tracker.fieldContact')}
                   </span>
                   <input
                     name="contact"
-                    placeholder="HR / 猎头 / 内推人"
+                    placeholder={t('tracker.placeholderContact')}
                     className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
                   />
                 </label>
                 <label className="block lg:col-span-2">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    薪资范围
+                    {t('tracker.fieldCompensation')}
                   </span>
                   <input
                     name="compensation"
-                    placeholder="例如：60-80k / 面议"
+                    placeholder={t('tracker.placeholderCompensation')}
                     className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
                   />
                 </label>
                 <label className="block lg:col-span-2">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    简历版本
+                    {t('tracker.fieldResumeVersion')}
                   </span>
                   <select
                     name="resumeVersionId"
                     defaultValue={resumeVersions[0]?.id ?? ''}
                     className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
                   >
-                    <option value="">未绑定版本</option>
+                    <option value="">{t('tracker.unbindVersion')}</option>
                     {resumeVersions.map((version) => (
                       <option key={version.id} value={version.id}>
                         {version.name}
@@ -940,34 +967,34 @@ export function ApplicationTrackerModal({
                 </label>
                 <label className="block lg:col-span-4">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    JD / 岗位关键词
+                    {t('tracker.fieldJobDescription')}
                   </span>
                   <textarea
                     name="jobDescription"
                     rows={3}
-                    placeholder="粘贴岗位描述、关键词、业务要求，便于回看版本命中情况。"
+                    placeholder={t('tracker.placeholderJD')}
                     className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
                   />
                 </label>
                 <label className="block lg:col-span-4">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    面试反馈
+                    {t('tracker.fieldInterviewFeedback')}
                   </span>
                   <textarea
                     name="interviewFeedback"
                     rows={3}
-                    placeholder="记录面试官追问、反馈、薄弱点和下一版简历需要强化的证据。"
+                    placeholder={t('tracker.placeholderFeedback')}
                     className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
                   />
                 </label>
                 <label className="block lg:col-span-4">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    备注
+                    {t('tracker.fieldNotes')}
                   </span>
                   <textarea
                     name="notes"
                     rows={3}
-                    placeholder="记录 JD 关键词、面试安排、跟进动作。"
+                    placeholder={t('tracker.placeholderNotes')}
                     className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
                   />
                 </label>
@@ -980,10 +1007,10 @@ export function ApplicationTrackerModal({
                   size="sm"
                   onClick={() => setIsAdding(false)}
                 >
-                  取消
+                  {t('tracker.cancel')}
                 </Button>
                 <Button type="submit" size="sm" icon={<Plus className="size-4" />}>
-                  保存投递
+                  {t('tracker.saveApplication')}
                 </Button>
               </div>
             </form>
@@ -995,12 +1022,12 @@ export function ApplicationTrackerModal({
               className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
             >
               <div className="mb-4 text-sm font-semibold text-slate-900">
-                编辑投递 · {editingApplication.company}
+                {t('tracker.editApplication')} · {editingApplication.company}
               </div>
               <div className="grid gap-4 lg:grid-cols-4">
                 <label className="block lg:col-span-2">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    公司
+                    {t('tracker.fieldCompany')}
                   </span>
                   <input
                     name="company"
@@ -1011,7 +1038,7 @@ export function ApplicationTrackerModal({
                 </label>
                 <label className="block lg:col-span-2">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    岗位
+                    {t('tracker.fieldRole')}
                   </span>
                   <input
                     name="role"
@@ -1022,7 +1049,7 @@ export function ApplicationTrackerModal({
                 </label>
                 <label className="block">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    城市
+                    {t('tracker.fieldLocation')}
                   </span>
                   <input
                     name="location"
@@ -1032,7 +1059,7 @@ export function ApplicationTrackerModal({
                 </label>
                 <label className="block">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    渠道
+                    {t('tracker.fieldChannel')}
                   </span>
                   <input
                     name="channel"
@@ -1042,7 +1069,7 @@ export function ApplicationTrackerModal({
                 </label>
                 <label className="block">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    投递日期
+                    {t('tracker.fieldAppliedAt')}
                   </span>
                   <input
                     name="appliedAt"
@@ -1053,7 +1080,7 @@ export function ApplicationTrackerModal({
                 </label>
                 <label className="block">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    下一步
+                    {t('tracker.fieldNextActionAt')}
                   </span>
                   <input
                     name="nextActionAt"
@@ -1064,21 +1091,21 @@ export function ApplicationTrackerModal({
                 </label>
                 <label className="block">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    优先级
+                    {t('tracker.fieldPriority')}
                   </span>
                   <select
                     name="priority"
                     defaultValue={editingApplication.priority}
                     className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
                   >
-                    <option value="high">重点</option>
-                    <option value="medium">普通</option>
-                    <option value="low">观察</option>
+                    <option value="high">{t('tracker.priorityHigh')}</option>
+                    <option value="medium">{t('tracker.priorityMedium')}</option>
+                    <option value="low">{t('tracker.priorityLow')}</option>
                   </select>
                 </label>
                 <label className="block">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    联系人
+                    {t('tracker.fieldContact')}
                   </span>
                   <input
                     name="contact"
@@ -1088,7 +1115,7 @@ export function ApplicationTrackerModal({
                 </label>
                 <label className="block lg:col-span-2">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    薪资范围
+                    {t('tracker.fieldCompensation')}
                   </span>
                   <input
                     name="compensation"
@@ -1098,14 +1125,14 @@ export function ApplicationTrackerModal({
                 </label>
                 <label className="block lg:col-span-2">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    简历版本
+                    {t('tracker.fieldResumeVersion')}
                   </span>
                   <select
                     name="resumeVersionId"
                     defaultValue={editingApplication.resumeVersionId}
                     className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-400 focus:bg-white"
                   >
-                    <option value="">未绑定版本</option>
+                    <option value="">{t('tracker.unbindVersion')}</option>
                     {resumeVersions.map((version) => (
                       <option key={version.id} value={version.id}>
                         {version.name}
@@ -1120,7 +1147,7 @@ export function ApplicationTrackerModal({
                 </label>
                 <label className="block lg:col-span-4">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    JD / 岗位关键词
+                    {t('tracker.fieldJobDescription')}
                   </span>
                   <textarea
                     name="jobDescription"
@@ -1131,7 +1158,7 @@ export function ApplicationTrackerModal({
                 </label>
                 <label className="block lg:col-span-4">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    面试反馈
+                    {t('tracker.fieldInterviewFeedback')}
                   </span>
                   <textarea
                     name="interviewFeedback"
@@ -1142,7 +1169,7 @@ export function ApplicationTrackerModal({
                 </label>
                 <label className="block lg:col-span-4">
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    备注
+                    {t('tracker.fieldNotes')}
                   </span>
                   <textarea
                     name="notes"
@@ -1160,10 +1187,10 @@ export function ApplicationTrackerModal({
                   size="sm"
                   onClick={() => setEditingId(null)}
                 >
-                  取消
+                  {t('tracker.cancel')}
                 </Button>
                 <Button type="submit" size="sm" icon={<Pencil className="size-4" />}>
-                  保存修改
+                  {t('tracker.saveEdit')}
                 </Button>
               </div>
             </form>
@@ -1176,7 +1203,7 @@ export function ApplicationTrackerModal({
                 type="search"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="搜索公司、岗位、城市、联系人或备注"
+                placeholder={t('tracker.searchPlaceholder')}
                 className="w-full rounded-full border border-slate-200 bg-white py-2.5 pl-11 pr-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
               />
             </label>
@@ -1193,7 +1220,7 @@ export function ApplicationTrackerModal({
                       : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-950',
                   ].join(' ')}
                 >
-                  {option.label}
+                  {t(filterLabelMap[option.value])}
                 </button>
               ))}
             </div>
@@ -1218,14 +1245,14 @@ export function ApplicationTrackerModal({
                               status.tone,
                             ].join(' ')}
                           >
-                            {status.label}
+                            {t(statusLabelMap[status.value])}
                           </span>
                           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                            {priorityLabels[application.priority]}
+                            {t(priorityLabelMap[application.priority])}
                           </span>
                           {application.archived ? (
                             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500">
-                              已归档
+                              {t('tracker.archived')}
                             </span>
                           ) : null}
                         </div>
@@ -1246,7 +1273,7 @@ export function ApplicationTrackerModal({
                           onClick={() => setEditingId(application.id)}
                           icon={<Pencil className="size-4" />}
                         >
-                          编辑
+                          {t('tracker.edit')}
                         </Button>
                         <select
                           value={application.status}
@@ -1259,7 +1286,7 @@ export function ApplicationTrackerModal({
                         >
                           {statusOptions.map((option) => (
                             <option key={option.value} value={option.value}>
-                              {option.label}
+                              {t(statusLabelMap[option.value])}
                             </option>
                           ))}
                         </select>
@@ -1274,7 +1301,7 @@ export function ApplicationTrackerModal({
                           }
                           icon={<Archive className="size-4" />}
                         >
-                          {application.archived ? '取消归档' : '归档'}
+                          {application.archived ? t('tracker.unarchive') : t('tracker.archive')}
                         </Button>
                         <Button
                           type="button"
@@ -1284,7 +1311,7 @@ export function ApplicationTrackerModal({
                           className="text-rose-600 hover:text-rose-700"
                           icon={<Trash2 className="size-4" />}
                         >
-                          删除
+                          {t('tracker.deleteConfirmDefault').split('?')[0]}
                         </Button>
                       </div>
                     </div>
@@ -1295,7 +1322,7 @@ export function ApplicationTrackerModal({
                       <div className="rounded-2xl bg-slate-50 p-3">
                         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
                           <ClipboardList className="size-4" />
-                          投递
+                          {t('tracker.detailApplied')}
                         </div>
                         <p className="mt-2 text-slate-800">
                           {application.appliedAt}
@@ -1304,28 +1331,28 @@ export function ApplicationTrackerModal({
                       <div className="rounded-2xl bg-slate-50 p-3">
                         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
                           <CalendarClock className="size-4" />
-                          下一步
+                          {t('tracker.detailNext')}
                         </div>
                         <p className="mt-2 text-slate-800">
-                          {application.nextActionAt || '待安排'}
+                          {application.nextActionAt || t('tracker.pendingArrange')}
                         </p>
                       </div>
                       <div className="rounded-2xl bg-slate-50 p-3">
                         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
                           <CheckCircle2 className="size-4" />
-                          条件
+                          {t('tracker.detailConditions')}
                         </div>
                         <p className="mt-2 text-slate-800">
-                          {application.compensation || '待确认'}
+                          {application.compensation || t('tracker.pendingConfirm')}
                         </p>
                       </div>
                       <div className="rounded-2xl bg-slate-50 p-3">
                         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
                           <BriefcaseBusiness className="size-4" />
-                          版本
+                          {t('tracker.detailVersion')}
                         </div>
                         <p className="mt-2 text-slate-800">
-                          {application.resumeVersionName || '未绑定'}
+                          {application.resumeVersionName || t('tracker.unbindVersion')}
                         </p>
                       </div>
                     </div>
@@ -1338,7 +1365,7 @@ export function ApplicationTrackerModal({
                         {application.contact ? (
                           <p>
                             <span className="font-semibold text-slate-800">
-                              联系：
+                              {t('tracker.contactPrefix')}：
                             </span>
                             {application.contact}
                           </p>
@@ -1346,7 +1373,7 @@ export function ApplicationTrackerModal({
                         {application.jobDescription ? (
                           <p>
                             <span className="font-semibold text-slate-800">
-                              JD：
+                              {t('tracker.jdPrefix')}：
                             </span>
                             {application.jobDescription}
                           </p>
@@ -1354,7 +1381,7 @@ export function ApplicationTrackerModal({
                         {application.interviewFeedback ? (
                           <p>
                             <span className="font-semibold text-slate-800">
-                              面试反馈：
+                              {t('tracker.feedbackPrefix')}：
                             </span>
                             {application.interviewFeedback}
                           </p>
@@ -1374,10 +1401,10 @@ export function ApplicationTrackerModal({
                 <BriefcaseBusiness className="size-5" />
               </div>
               <p className="mt-4 text-base font-semibold text-slate-950">
-                暂无投递记录
+                {t('tracker.emptyTitle')}
               </p>
               <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
-                添加公司与岗位后，可以在这里追踪阶段、下一步动作和归档状态。
+                {t('tracker.emptyDescription')}
               </p>
               <Button
                 type="button"
@@ -1386,7 +1413,7 @@ export function ApplicationTrackerModal({
                 onClick={() => setIsAdding(true)}
                 icon={<Plus className="size-4" />}
               >
-                新增投递
+                {t('tracker.addApplication')}
               </Button>
             </div>
           )}
@@ -1402,7 +1429,7 @@ export function ApplicationTrackerModal({
                 }}
                 icon={<RotateCcw className="size-4" />}
               >
-                清空投递记录
+                {t('tracker.clearAll')}
               </Button>
             </div>
           ) : null}

@@ -1,10 +1,12 @@
 import {
   BriefcaseBusiness,
   Check,
+  ChevronDown,
   Download,
   FileInput,
   FilePenLine,
   FileText,
+  Globe,
   LayoutTemplate,
   Monitor,
   Moon,
@@ -15,6 +17,8 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { ResolvedTheme, ThemeMode } from '../../hooks/useThemeMode';
+import type { LanguageMode } from '../../hooks/useLanguageMode';
+import { useLanguageMode } from '../../hooks/useLanguageMode';
 import type { PdfTemplateId } from '../../types/pdf-template';
 import { Button } from '../ui/Button';
 import { Container } from './Container';
@@ -45,12 +49,160 @@ type PageShellProps = {
   onOpenApplicationTracker: () => void;
   onRestoreDefault: () => void;
   onThemeModeChange: (themeMode: ThemeMode) => void;
+  onLanguageModeChange: (lang: LanguageMode) => void;
+  showLanguageToggle?: boolean;
   onToggleEditing: () => void;
   onTemplateChange: (templateId: PdfTemplateId) => void;
   onExportPdf: () => void;
   onViewPdf: () => void;
   children: ReactNode;
 };
+
+/** 语言选择器：常用语言快捷选择 + 自定义语言输入 */
+const QUICK_LANGUAGES: { code: string; label: string }[] = [
+  { code: 'zh', label: '中文' },
+  { code: 'en', label: 'English' },
+  { code: 'ja', label: '日本語' },
+  { code: 'ko', label: '한국어' },
+];
+
+function LanguageSelector({
+  current,
+  onChange,
+  resolvedTheme,
+}: {
+  current: string;
+  onChange: (lang: string) => void;
+  resolvedTheme: ResolvedTheme;
+}) {
+  const [open, setOpen] = useState(false);
+  const [customLang, setCustomLang] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  const { t } = useLanguageMode();
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const currentLabel =
+    QUICK_LANGUAGES.find((l) => l.code === current)?.label ?? current.toUpperCase();
+
+  const textColor =
+    resolvedTheme === 'dark'
+      ? 'text-slate-400 hover:text-white'
+      : 'text-slate-500 hover:text-slate-950';
+
+  function handleCustomSubmit() {
+    const trimmed = customLang.trim();
+    if (!trimmed) return;
+    // 用户可能输入语言名称（如 "Japanese"）或代码（如 "ja"）
+    // 如果是已知代码直接使用，否则作为语言名称传给 AI
+    const knownCode = QUICK_LANGUAGES.find(
+      (l) => l.code === trimmed.toLowerCase() || l.label.toLowerCase() === trimmed.toLowerCase(),
+    );
+    onChange(knownCode ? knownCode.code : trimmed.toLowerCase());
+    setCustomLang('');
+    setOpen(false);
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label={t('nav.languageToggle')}
+        className={[
+          'inline-flex h-7 items-center gap-1 px-2 text-xs font-semibold tracking-wide transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 rounded-sm sm:h-8 sm:px-3 sm:text-sm',
+          textColor,
+        ].join(' ')}
+      >
+        <Globe className="size-3.5" />
+        {currentLabel}
+        <ChevronDown className="size-3" />
+      </button>
+
+      {open ? (
+        <div
+          className={[
+            'absolute right-0 top-full z-50 mt-1 min-w-[10rem] overflow-hidden rounded-xl border shadow-lg',
+            resolvedTheme === 'dark'
+              ? 'border-slate-700 bg-slate-900'
+              : 'border-slate-200 bg-white',
+          ].join(' ')}
+        >
+          {QUICK_LANGUAGES.map((lang) => (
+            <button
+              key={lang.code}
+              type="button"
+              onClick={() => {
+                onChange(lang.code);
+                setOpen(false);
+              }}
+              className={[
+                'flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition',
+                lang.code === current
+                  ? 'font-semibold text-sky-600'
+                  : resolvedTheme === 'dark'
+                    ? 'text-slate-300 hover:bg-white/5'
+                    : 'text-slate-700 hover:bg-slate-50',
+              ].join(' ')}
+            >
+              {lang.code === current ? <Check className="size-3.5" /> : <span className="size-3.5" />}
+              {lang.label}
+            </button>
+          ))}
+
+          <div
+            className={[
+              'border-t px-3 py-2',
+              resolvedTheme === 'dark' ? 'border-slate-700' : 'border-slate-200',
+            ].join(' ')}
+          >
+            <p
+              className={[
+                'mb-1.5 text-[11px] font-medium uppercase tracking-wider',
+                resolvedTheme === 'dark' ? 'text-slate-500' : 'text-slate-400',
+              ].join(' ')}
+            >
+              其他语言
+            </p>
+            <div className="flex gap-1">
+              <input
+                type="text"
+                value={customLang}
+                onChange={(e) => setCustomLang(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCustomSubmit();
+                }}
+                placeholder="如: fr, de, ru..."
+                className={[
+                  'min-w-0 flex-1 rounded-lg border px-2 py-1 text-xs outline-none transition',
+                  resolvedTheme === 'dark'
+                    ? 'border-slate-600 bg-slate-800 text-slate-200 placeholder:text-slate-500 focus:border-sky-500'
+                    : 'border-slate-200 bg-slate-50 text-slate-800 placeholder:text-slate-400 focus:border-sky-500',
+                ].join(' ')}
+              />
+              <button
+                type="button"
+                onClick={handleCustomSubmit}
+                className="rounded-lg bg-sky-600 px-2 py-1 text-xs font-medium text-white hover:bg-sky-700"
+              >
+                Go
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export function PageShell({
   themeMode,
@@ -74,12 +226,15 @@ export function PageShell({
   onOpenApplicationTracker,
   onRestoreDefault,
   onThemeModeChange,
+  onLanguageModeChange,
+  showLanguageToggle = false,
   onToggleEditing,
   onTemplateChange,
   onExportPdf,
   onViewPdf,
   children,
 }: PageShellProps) {
+  const { t, mode: languageMode } = useLanguageMode();
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -91,20 +246,23 @@ export function PageShell({
   }> = [
     {
       value: 'system',
-      label: '自动',
-      description: `当前${resolvedTheme === 'dark' ? '深色' : '浅色'}`,
+      label: t('nav.auto'),
+      description:
+        resolvedTheme === 'dark'
+          ? t('nav.autoThemeDescription')
+          : t('nav.autoThemeDescriptionLight'),
       icon: Monitor,
     },
     {
       value: 'light',
-      label: '浅色',
-      description: '明亮阅读',
+      label: t('nav.light'),
+      description: t('nav.lightThemeDescription'),
       icon: Sun,
     },
     {
       value: 'dark',
-      label: '深色',
-      description: '低亮阅读',
+      label: t('nav.dark'),
+      description: t('nav.darkThemeDescription'),
       icon: Moon,
     },
   ];
@@ -201,9 +359,9 @@ export function PageShell({
                     quietActionClass,
                     '[&_span]:hidden sm:[&_span]:inline',
                   ].join(' ')}
-                  aria-label="导入 PDF"
+                  aria-label={t('nav.import')}
                 >
-                  导入 PDF
+                  {t('nav.import')}
                 </Button>
               ) : null}
 
@@ -217,9 +375,9 @@ export function PageShell({
                     isEditing ? activeEditClass : quietActionClass,
                     '[&_span]:hidden sm:[&_span]:inline',
                   ].join(' ')}
-                  aria-label={isEditing ? '完成编辑' : '编辑'}
+                  aria-label={isEditing ? t('nav.completeEdit') : t('nav.edit')}
                 >
-                  {isEditing ? '完成编辑' : '编辑'}
+                  {isEditing ? t('nav.completeEdit') : t('nav.edit')}
                 </Button>
               ) : null}
 
@@ -233,9 +391,9 @@ export function PageShell({
                     quietActionClass,
                     '[&_span]:hidden sm:[&_span]:inline',
                   ].join(' ')}
-                  aria-label="AI 助手"
+                  aria-label={t('nav.aiAssistant')}
                 >
-                  AI 助手
+                  {t('nav.aiAssistant')}
                 </Button>
               ) : null}
 
@@ -249,9 +407,9 @@ export function PageShell({
                     quietActionClass,
                     '[&_span]:hidden sm:[&_span]:inline',
                   ].join(' ')}
-                  aria-label="投递追踪"
+                  aria-label={t('nav.applicationTracker')}
                 >
-                  投递追踪
+                  {t('nav.applicationTracker')}
                 </Button>
               ) : null}
             </div>
@@ -272,7 +430,7 @@ export function PageShell({
                       ? 'border-slate-800/70 bg-slate-950/55 text-slate-300 hover:bg-slate-900/80 hover:text-white'
                       : 'border-slate-200/80 bg-white/88 text-slate-600 hover:bg-slate-100 hover:text-slate-950',
                   ].join(' ')}
-                  aria-label="更多操作"
+                  aria-label={t('nav.more')}
                   aria-expanded={actionMenuOpen}
                 >
                   <MoreHorizontal className="size-4" />
@@ -306,7 +464,7 @@ export function PageShell({
                             templateMenuTitleClass,
                           ].join(' ')}
                         >
-                          更多操作
+                          {t('nav.moreTitle')}
                         </p>
                       </div>
 
@@ -321,7 +479,7 @@ export function PageShell({
                                   : 'text-slate-500',
                               ].join(' ')}
                             >
-                              PDF 模板
+                            {t('nav.pdfTemplate')}
                             </p>
                             {templateOptions.map((option) => {
                               const active = option.id === selectedTemplateId;
@@ -410,7 +568,7 @@ export function PageShell({
                             ].join(' ')}
                           >
                             <FileText className="size-4 shrink-0" />
-                            <span>{isPdfBusy ? '生成中...' : '预览 PDF'}</span>
+                            <span>{isPdfBusy ? t('nav.exportingPdf') : t('nav.previewPdf')}</span>
                           </button>
                         ) : null}
 
@@ -428,7 +586,7 @@ export function PageShell({
                             ].join(' ')}
                           >
                             <Download className="size-4 shrink-0" />
-                            <span>{isPdfBusy ? '导出中...' : '导出 PDF'}</span>
+                            <span>{isPdfBusy ? t('nav.exportingPdf') : t('nav.exportPdf')}</span>
                           </button>
                         ) : null}
 
@@ -444,7 +602,7 @@ export function PageShell({
                             ].join(' ')}
                           >
                             <RotateCcw className="size-4 shrink-0" />
-                            <span>恢复默认简历</span>
+                            <span>{t('nav.restore')}</span>
                           </button>
                         ) : null}
 
@@ -463,7 +621,7 @@ export function PageShell({
                   : 'border-slate-200/80 bg-white/88',
               ].join(' ')}
               role="group"
-              aria-label="页面显示模式"
+              aria-label={t('nav.pageDisplayMode')}
             >
               {themeOptions.map((option) => {
                 const active = option.value === themeMode;
@@ -495,6 +653,14 @@ export function PageShell({
                 );
               })}
             </div>
+
+            {showLanguageToggle ? (
+              <LanguageSelector
+                current={languageMode}
+                onChange={onLanguageModeChange}
+                resolvedTheme={resolvedTheme}
+              />
+            ) : null}
           </div>
         </Container>
       </header>

@@ -1,4 +1,5 @@
 import type { EducationItem } from '../../types/resume';
+import { useLanguageMode } from '../../hooks/useLanguageMode';
 import { EditorRemoveButton, EditorSectionActions } from '../editor/EditorActions';
 import { EditableText } from '../editor/EditableText';
 import { createEducationDraft } from '../editor/resume-draft-factories';
@@ -12,14 +13,15 @@ type EducationSectionProps = {
 
 export function EducationSection({ items }: EducationSectionProps) {
   const { isEditing, updateResume } = useResumeEditor();
+  const { t } = useLanguageMode();
 
   return (
-    <Section id="education" eyebrow="教育" title="教育背景" className="bg-white">
+    <Section id="education" eyebrow={t('section.educationEyebrow')} title={t('section.education')} className="bg-white">
       <EditorSectionActions
         isEditing={isEditing}
-        addLabel="新增教育卡片"
+        addLabel={t('editor.addEducation')}
         isEmpty={!items.length}
-        emptyMessage="当前没有教育卡片，先新增一项。"
+        emptyMessage={t('editor.educationEmpty')}
         onAdd={() =>
           updateResume((draft) => {
             draft.education.push(createEducationDraft());
@@ -29,7 +31,7 @@ export function EducationSection({ items }: EducationSectionProps) {
 
       <div className="grid gap-4 lg:grid-cols-2">
         {items.map((item, index) => (
-          <Card key={`${item.school}-${item.period}-${index}`} className="h-full">
+          <Card key={`education-${index}`} className="h-full">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex-1 space-y-2">
                 <div className="flex items-start justify-between gap-3">
@@ -64,7 +66,7 @@ export function EducationSection({ items }: EducationSectionProps) {
                         draft.education[index].degree = value;
                       })
                     }
-                    placeholder="学历"
+                    placeholder={t('editor.degreePlaceholder')}
                     displayAs="p"
                     displayClassName="text-sm font-medium text-slate-700"
                     inputClassName="min-w-[8rem] text-sm font-medium text-slate-700"
@@ -78,7 +80,7 @@ export function EducationSection({ items }: EducationSectionProps) {
                         draft.education[index].major = value || undefined;
                       })
                     }
-                    placeholder="专业"
+                    placeholder={t('editor.majorPlaceholder')}
                     displayAs="p"
                     displayClassName="text-sm font-medium text-slate-600"
                     inputClassName="min-w-[10rem] text-sm font-medium text-slate-600"

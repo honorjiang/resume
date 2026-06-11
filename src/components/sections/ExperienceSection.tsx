@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion';
-import { ChevronDown, ChevronUp, FolderKanban } from 'lucide-react';
+import { ChevronDown, ChevronUp, FolderKanban, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { ExperienceItem, ProjectItem } from '../../types/resume';
+import { useLanguageMode } from '../../hooks/useLanguageMode';
 import { EditorRemoveButton, EditorSectionActions } from '../editor/EditorActions';
 import { EditableText } from '../editor/EditableText';
 import {
@@ -10,7 +11,7 @@ import {
   parseCommaList,
   parseLineList,
 } from '../editor/list-format';
-import { createExperienceDraft } from '../editor/resume-draft-factories';
+import { createExperienceDraft, createProjectDraft } from '../editor/resume-draft-factories';
 import { useResumeEditor } from '../editor/ResumeEditorContext';
 import { Section } from '../layout/Section';
 import { Badge } from '../ui/Badge';
@@ -42,6 +43,7 @@ export function ExperienceSection({
   projects,
 }: ExperienceSectionProps) {
   const { isEditing, updateResume, getAiEditedState } = useResumeEditor();
+  const { t } = useLanguageMode();
   const [activeProjectModal, setActiveProjectModal] =
     useState<ActiveProjectModal | null>(null);
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(
@@ -91,13 +93,13 @@ export function ExperienceSection({
         ? getRelatedProjectEntries(activeExperience)
         : [];
   const activeModalTitle = activeExperience
-    ? `${activeExperience.company} 项目经历`
+    ? `${activeExperience.company} ${t('editor.projectCount')}`
     : activeProjectModal?.kind === 'unassigned'
-      ? '未归属项目经历'
-      : '项目经历';
+      ? t('editor.unassignedProjectsTitle')
+      : t('editor.projectCount');
   const activeModalSubtitle = activeExperience
     ? `${activeExperience.role} · ${activeExperience.period}`
-    : '这些项目尚未关联到具体工作经历，可在弹窗内查看和润色。';
+    : t('editor.unassignedProjectsDescription');
 
   function getRelatedProjectCount(item: ExperienceItem) {
     return getRelatedProjectEntries(item).length;
@@ -133,12 +135,12 @@ export function ExperienceSection({
   }
 
   return (
-    <Section id="experience" eyebrow="经历" title="工作经历" className="bg-slate-50/80">
+    <Section id="experience" eyebrow={t('section.experienceEyebrow')} title={t('section.experience')} className="bg-slate-50/80">
       <EditorSectionActions
         isEditing={isEditing}
-        addLabel="新增经历卡片"
+        addLabel={t('editor.addExperience')}
         isEmpty={!items.length}
-        emptyMessage="当前没有工作经历卡片，先新增一项。"
+        emptyMessage={t('editor.experienceEmpty')}
         onAdd={() =>
           updateResume((draft) => {
             draft.experience.push(createExperienceDraft());
@@ -152,7 +154,7 @@ export function ExperienceSection({
             const relatedProjectCount = getRelatedProjectCount(item);
             const isDarkCard = index % 2 === 0;
             const cardClass = isDarkCard
-              ? 'border-slate-900 bg-slate-950 text-white shadow-[0_24px_60px_rgba(15,23,42,0.16)] hover:shadow-[0_30px_70px_rgba(15,23,42,0.22)]'
+              ? 'border-slate-700 bg-slate-800 text-white shadow-[0_24px_60px_rgba(15,23,42,0.12)] hover:shadow-[0_30px_70px_rgba(15,23,42,0.16)]'
               : 'border-[var(--line)] bg-white text-slate-950 shadow-[0_24px_60px_rgba(15,23,42,0.06)] hover:shadow-[0_28px_64px_rgba(15,23,42,0.1)]';
             const titleClass = isDarkCard ? 'text-white' : 'text-slate-950';
             const metaClass = isDarkCard ? 'text-slate-300' : 'text-slate-600';
@@ -162,10 +164,10 @@ export function ExperienceSection({
             const dividerClass = isDarkCard ? 'border-white/10' : 'border-slate-200';
             const editLabelClass = isDarkCard ? 'text-slate-200' : 'text-slate-800';
             const editPanelClass = isDarkCard
-              ? 'rounded-2xl border border-white/10 bg-white/[0.06] p-4'
+              ? 'rounded-2xl border border-white/10 bg-black/25 p-4 shadow-inner'
               : '';
             const editInputClass = isDarkCard
-              ? '!border-white/20 !bg-white !text-slate-950 shadow-sm'
+              ? '!border-white/15 !bg-slate-700/70 !text-slate-50 shadow-inner placeholder:!text-slate-400 focus:!border-sky-300/40'
               : '';
             const removeButtonClass = isDarkCard
               ? '!text-slate-300 hover:!bg-white/10 hover:!text-rose-200'
@@ -248,7 +250,7 @@ export function ExperienceSection({
                               draft.experience[index].location = value || undefined;
                             })
                           }
-                          placeholder="地点"
+                          placeholder={t('editor.locationPlaceholder')}
                           displayAs="p"
                           displayClassName={`text-sm font-medium ${mutedClass}`}
                           inputClassName={[
@@ -265,7 +267,7 @@ export function ExperienceSection({
                             draft.experience[index].summary = value || undefined;
                           })
                         }
-                        placeholder="补充工作概述"
+                        placeholder={t('editor.placeholderSummary')}
                         multiline
                         rows={3}
                         displayAs="p"
@@ -301,7 +303,7 @@ export function ExperienceSection({
                           }
                           multiline
                           rows={3}
-                          placeholder="使用逗号分隔标签"
+                          placeholder={t('editor.placeholderTags')}
                           inputClassName={[
                             'text-sm text-slate-600',
                             editInputClass,
@@ -322,7 +324,7 @@ export function ExperienceSection({
                   {isEditing ? (
                     <div className={['mt-6 space-y-4', editPanelClass].join(' ')}>
                       <div>
-                        <p className={`mb-2 text-sm font-semibold ${editLabelClass}`}>成果列表</p>
+                        <p className={`mb-2 text-sm font-semibold ${editLabelClass}`}>{t('editor.achievementsList')}</p>
                         <EditableText
                           value={formatLineList(item.achievements)}
                           fieldPath={`experience.${index}.achievements`}
@@ -334,7 +336,7 @@ export function ExperienceSection({
                           }
                           multiline
                           rows={6}
-                          placeholder="每行一条成果"
+                          placeholder={t('editor.achievementsTextarea')}
                           inputClassName={[
                             'text-sm leading-7 text-slate-700',
                             editInputClass,
@@ -381,7 +383,7 @@ export function ExperienceSection({
                         type="button"
                         variant="secondary"
                         size="sm"
-                        icon={<FolderKanban className="size-4" />}
+                        icon={isEditing && !unassignedProjectEntries.length ? <Plus className="size-4" /> : <FolderKanban className="size-4" />}
                         className={projectButtonClass}
                         onClick={() =>
                           setActiveProjectModal({
@@ -390,7 +392,7 @@ export function ExperienceSection({
                           })
                         }
                       >
-                        项目经历（{relatedProjectCount}）
+                        {t('editor.projectCount')} ({relatedProjectCount})
                       </Button>
                     </div>
                   ) : null}
@@ -398,7 +400,7 @@ export function ExperienceSection({
               </motion.article>
             );
           })}
-          {unassignedProjectEntries.length ? (
+          {unassignedProjectEntries.length || isEditing ? (
             <motion.article
               initial={{ opacity: 0, x: 18 }}
               whileInView={{ opacity: 1, x: 0 }}
@@ -413,20 +415,22 @@ export function ExperienceSection({
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-sm font-semibold text-amber-950">
-                      未归属项目经历
+                      {t('editor.unassignedProjectsTitle')}
                     </p>
                     <p className="mt-1 text-sm leading-6 text-amber-800">
-                      这些项目还没有匹配到具体工作经历，暂时集中在工作经历区查看。
+                      {t('editor.unassignedProjectsDescription')}
                     </p>
                   </div>
                   <Button
                     type="button"
                     variant="secondary"
                     size="sm"
-                    icon={<FolderKanban className="size-4" />}
+                    icon={isEditing && !unassignedProjectEntries.length ? <Plus className="size-4" /> : <FolderKanban className="size-4" />}
                     onClick={() => setActiveProjectModal({ kind: 'unassigned' })}
                   >
-                    项目经历（{unassignedProjectEntries.length}）
+                    {isEditing && !unassignedProjectEntries.length
+                      ? t('editor.addProject')
+                      : `${t('editor.projectCount')} (${unassignedProjectEntries.length})`}
                   </Button>
                 </div>
               </div>
@@ -439,15 +443,15 @@ export function ExperienceSection({
         isOpen={Boolean(activeProjectModal)}
         onClose={() => setActiveProjectModal(null)}
         title={activeModalTitle}
-        description="展示该工作经历关联的项目内容，可在编辑模式下直接润色项目经历。"
+        description={t('projectModal.description')}
       >
         <div className="flex min-h-0 flex-col bg-slate-50">
           <div className="border-b border-slate-200 bg-white px-6 py-5 pr-16">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-400">
-              项目经历
+              {t('editor.projectCount')}
             </p>
             <h3 className="mt-2 text-xl font-semibold text-slate-950">
-              {activeExperience?.company ?? '未归属项目'}
+              {activeExperience?.company ?? t('editor.noProjectEntries')}
             </h3>
             <p className="mt-1 text-sm text-slate-600">
               {activeModalSubtitle}
@@ -461,7 +465,7 @@ export function ExperienceSection({
                   const isExpanded = expandedProjectIds.has(projectId);
                   const isDarkProjectCard = modalProjectIndex % 2 === 0;
                   const projectCardClass = isDarkProjectCard
-                    ? 'border-slate-900 bg-slate-950 text-white shadow-[0_18px_44px_rgba(15,23,42,0.18)]'
+                    ? 'border-slate-700 bg-slate-800 text-white shadow-[0_18px_44px_rgba(15,23,42,0.12)]'
                     : 'border-slate-200 bg-white text-slate-950 shadow-sm';
                   const projectTitleClass = isDarkProjectCard
                     ? 'text-white'
@@ -482,7 +486,7 @@ export function ExperienceSection({
                     ? '!text-slate-200 hover:!bg-white/10 hover:!text-white'
                     : '';
                   const projectEditInputClass = isDarkProjectCard
-                    ? '!border-white/20 !bg-white !text-slate-950 shadow-sm'
+                    ? '!border-white/15 !bg-slate-700/70 !text-slate-50 shadow-inner placeholder:!text-slate-400 focus:!border-sky-300/40'
                     : '';
 
                   return (
@@ -495,6 +499,7 @@ export function ExperienceSection({
                     >
                       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem] lg:items-start">
                         <div className="space-y-3">
+                          <div className="flex items-start justify-between gap-3">
                           <EditableText
                             value={project.name}
                             onChange={(value) =>
@@ -509,6 +514,25 @@ export function ExperienceSection({
                               projectEditInputClass,
                             ].join(' ')}
                           />
+                          {isEditing ? (
+                            <EditorRemoveButton
+                              className={isDarkProjectCard ? '!text-slate-300 hover:!bg-white/10 hover:!text-rose-200' : ''}
+                              onRemove={() =>
+                                updateResume((draft) => {
+                                  const deletedId = draft.projects[projectIndex].id;
+                                  draft.projects.splice(projectIndex, 1);
+                                  draft.experience.forEach((exp) => {
+                                    if (exp.relatedProjectIds) {
+                                      exp.relatedProjectIds = exp.relatedProjectIds.filter(
+                                        (id) => id !== deletedId,
+                                      );
+                                    }
+                                  });
+                                })
+                              }
+                            />
+                          ) : null}
+                          </div>
                           <EditableText
                             value={project.summary ?? ''}
                             fieldPath={`projects.${projectIndex}.summary`}
@@ -517,7 +541,7 @@ export function ExperienceSection({
                                 draft.projects[projectIndex].summary = value;
                               })
                             }
-                            placeholder="补充项目摘要"
+                            placeholder={t('editor.placeholderProjectSummary')}
                             multiline
                             rows={3}
                             displayAs="p"
@@ -553,7 +577,7 @@ export function ExperienceSection({
                                   value || undefined;
                               })
                             }
-                            placeholder="项目周期"
+                            placeholder={t('editor.placeholderSubtitle')}
                             displayAs="p"
                             displayClassName={`text-sm ${projectMutedClass}`}
                             inputClassName={[
@@ -572,7 +596,7 @@ export function ExperienceSection({
                               }
                               multiline
                               rows={3}
-                              placeholder="使用逗号分隔标签"
+                              placeholder={t('editor.placeholderTags')}
                               inputClassName={[
                                 'text-sm text-slate-600',
                                 projectEditInputClass,
@@ -609,7 +633,7 @@ export function ExperienceSection({
                           onClick={() => handleProjectDetailToggle(projectId)}
                           className={projectToggleClass}
                         >
-                          {isExpanded ? '收起详情' : '展开详情'}
+                          {isExpanded ? t('editor.hideDetails') : t('editor.showDetails')}
                         </Button>
                       </div>
 
@@ -622,7 +646,7 @@ export function ExperienceSection({
                       >
                         <div className="lg:col-span-2">
                           <p className={`text-sm font-semibold ${projectHeadingClass}`}>
-                            项目背景
+                            {t('editor.projectBackground')}
                           </p>
                           <div className="mt-2">
                             <EditableText
@@ -647,7 +671,7 @@ export function ExperienceSection({
 
                         <div>
                           <p className={`text-sm font-semibold ${projectHeadingClass}`}>
-                            关键动作
+                            {t('editor.projectActions')}
                           </p>
                           {isEditing ? (
                             <div className="mt-3">
@@ -663,7 +687,7 @@ export function ExperienceSection({
                                 }
                                 multiline
                                 rows={6}
-                                placeholder="每行一条关键动作"
+                                placeholder={t('editor.actionsTextarea')}
                                 inputClassName={[
                                   'text-sm leading-7 text-slate-600',
                                   projectEditInputClass,
@@ -698,7 +722,7 @@ export function ExperienceSection({
 
                         <div>
                           <p className={`text-sm font-semibold ${projectHeadingClass}`}>
-                            最终结果
+                            {t('editor.projectOutcomes')}
                           </p>
                           {isEditing ? (
                             <div className="mt-3">
@@ -714,7 +738,7 @@ export function ExperienceSection({
                                 }
                                 multiline
                                 rows={6}
-                                placeholder="每行一条项目结果"
+                                placeholder={t('editor.outcomesTextarea')}
                                 inputClassName={[
                                   'text-sm leading-7 text-slate-600',
                                   projectEditInputClass,
@@ -753,9 +777,36 @@ export function ExperienceSection({
               </div>
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
-                当前工作经历没有匹配到可展示的项目经历。
+                {t('editor.noProjectEntries')}
               </div>
             )}
+            {isEditing ? (
+              <div className="flex justify-center pt-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  icon={<Plus className="size-4" />}
+                  onClick={() =>
+                    updateResume((draft) => {
+                      const newProject = createProjectDraft(false);
+                      draft.projects.push(newProject);
+                      if (activeProjectModal?.kind === 'experience') {
+                        const exp = draft.experience[activeProjectModal.experienceIndex];
+                        if (exp) {
+                          if (!exp.relatedProjectIds) {
+                            exp.relatedProjectIds = [];
+                          }
+                          exp.relatedProjectIds.push(newProject.id);
+                        }
+                      }
+                    })
+                  }
+                >
+                  {t('editor.addProject')}
+                </Button>
+              </div>
+            ) : null}
           </div>
         </div>
       </Modal>

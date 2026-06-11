@@ -18,6 +18,14 @@
   --ai-highlight: #f59e0b;
   --ai-highlight-soft: rgba(245, 158, 11, 0.26);
   --ai-highlight-ring: rgba(245, 158, 11, 0.18);
+  --hero-bg: linear-gradient(
+    180deg,
+    rgba(248, 250, 252, 0.96),
+    rgba(241, 245, 249, 0.72)
+  );
+  --modal-backdrop: rgba(15, 23, 42, 0.55);
+  --nav-inactive: rgb(203 213 225 / 0.75);
+  --nav-inactive-hover: rgb(148 163 184);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -41,6 +49,14 @@
   --muted: #9fb1c7;
   --ai-highlight-soft: rgba(251, 191, 36, 0.2);
   --ai-highlight-ring: rgba(251, 191, 36, 0.14);
+  --hero-bg: linear-gradient(
+    180deg,
+    rgba(15, 23, 42, 0.6),
+    rgba(8, 15, 29, 0.4)
+  );
+  --modal-backdrop: rgba(2, 6, 23, 0.78);
+  --nav-inactive: rgba(148, 163, 184, 0.45);
+  --nav-inactive-hover: rgba(148, 163, 184, 0.85);
 }
 
 html {
@@ -138,6 +154,15 @@ select {
   background-color: rgba(15, 23, 42, 0.82) !important;
 }
 
+/* --- Dark card backgrounds (slate-700/800 used in hero & experience cards) --- */
+:root[data-theme='dark'] .bg-slate-800 {
+  background-color: rgba(15, 30, 53, 0.92) !important;
+}
+:root[data-theme='dark'] .bg-slate-700\/70,
+:root[data-theme='dark'] .bg-slate-700\/80 {
+  background-color: rgba(25, 42, 68, 0.85) !important;
+}
+
 :root[data-theme='dark'] .bg-slate-100 {
   background-color: rgba(30, 41, 59, 0.82) !important;
 }
@@ -213,6 +238,328 @@ select {
   border-color: rgba(125, 211, 252, 0.46) !important;
 }
 
+/* --- Editor inputs (EditableText textarea / input) --- */
+:root[data-theme='dark'] textarea.border-sky-200,
+:root[data-theme='dark'] input.border-sky-200 {
+  background-color: rgba(15, 27, 45, 0.95) !important;
+  border-color: rgba(125, 211, 252, 0.22) !important;
+  color: var(--ink) !important;
+}
+
+:root[data-theme='dark'] textarea.border-sky-200::placeholder,
+:root[data-theme='dark'] input.border-sky-200::placeholder {
+  color: #64748b !important;
+}
+
+:root[data-theme='dark'] textarea.border-sky-200:focus,
+:root[data-theme='dark'] input.border-sky-200:focus {
+  border-color: rgba(125, 211, 252, 0.46) !important;
+}
+
+/* --- AI action buttons in editor --- */
+:root[data-theme='dark'] button.border-slate-200.bg-white {
+  background-color: rgba(19, 35, 58, 0.92) !important;
+  border-color: rgba(148, 163, 184, 0.18) !important;
+  color: #c8d6e6 !important;
+}
+
+:root[data-theme='dark'] button.border-slate-200.bg-white:hover {
+  border-color: rgba(125, 211, 252, 0.28) !important;
+  color: #ffffff !important;
+}
+
+/* --- Modal inner areas --- */
+:root[data-theme='dark'] .bg-slate-50\/90 {
+  background-color: rgba(8, 15, 28, 0.96) !important;
+}
+
+/* --- Tracker stats badges (colored backgrounds) --- */
+:root[data-theme='dark'] .bg-blue-50 {
+  background-color: rgba(56, 120, 200, 0.15) !important;
+}
+:root[data-theme='dark'] .text-blue-700 {
+  color: #93c5fd !important;
+}
+
+:root[data-theme='dark'] .bg-violet-50 {
+  background-color: rgba(139, 92, 246, 0.12) !important;
+}
+:root[data-theme='dark'] .text-violet-700 {
+  color: #c4b5fd !important;
+}
+
+:root[data-theme='dark'] .bg-emerald-50 {
+  background-color: rgba(16, 185, 129, 0.12) !important;
+}
+:root[data-theme='dark'] .text-emerald-700 {
+  color: #6ee7b7 !important;
+}
+
+:root[data-theme='dark'] .bg-rose-50 {
+  background-color: rgba(244, 63, 94, 0.12) !important;
+}
+:root[data-theme='dark'] .text-rose-700 {
+  color: #fda4af !important;
+}
+
+:root[data-theme='dark'] .bg-amber-50 {
+  background-color: rgba(245, 158, 11, 0.12) !important;
+}
+:root[data-theme='dark'] .text-amber-700,
+:root[data-theme='dark'] .text-amber-800 {
+  color: #fcd34d !important;
+}
+
+:root[data-theme='dark'] .border-amber-200 {
+  border-color: rgba(245, 158, 11, 0.2) !important;
+}
+
+:root[data-theme='dark'] .border-emerald-200 {
+  border-color: rgba(16, 185, 129, 0.2) !important;
+}
+
+:root[data-theme='dark'] .border-violet-200 {
+  border-color: rgba(139, 92, 246, 0.2) !important;
+}
+
+:root[data-theme='dark'] .border-rose-200 {
+  border-color: rgba(244, 63, 94, 0.2) !important;
+}
+
+:root[data-theme='dark'] .border-sky-200 {
+  border-color: rgba(125, 211, 252, 0.2) !important;
+}
+
+/* --- Status pill tones (used in workbench & tracker) --- */
+:root[data-theme='dark'] .bg-sky-50 {
+  background-color: rgba(56, 160, 240, 0.12) !important;
+}
+:root[data-theme='dark'] .text-sky-700 {
+  color: #7dd3fc !important;
+}
+:root[data-theme='dark'] .border-sky-200 {
+  border-color: rgba(125, 211, 252, 0.2) !important;
+}
+
+/* --- Tracker active filter: inverted pill --- */
+:root[data-theme='dark'] .border-slate-950.bg-slate-950 {
+  background-color: rgba(125, 211, 252, 0.18) !important;
+  border-color: rgba(125, 211, 252, 0.28) !important;
+  color: #ffffff !important;
+}
+
+/* --- Tracker form inputs inside modal --- */
+:root[data-theme='dark'] select.border-slate-200,
+:root[data-theme='dark'] input[type="date"].border-slate-200 {
+  background-color: rgba(15, 23, 42, 0.6) !important;
+  border-color: rgba(148, 163, 184, 0.18) !important;
+  color: #dbe6f3 !important;
+}
+
+:root[data-theme='dark'] select.border-slate-200:focus,
+:root[data-theme='dark'] input[type="date"].border-slate-200:focus {
+  border-color: rgba(125, 211, 252, 0.46) !important;
+}
+
+/* color-scheme lets date/select native pickers use dark rendering */
+:root[data-theme='dark'] select,
+:root[data-theme='dark'] input[type="date"] {
+  color-scheme: dark;
+}
+
+/* --- Dashed empty-state borders --- */
+:root[data-theme='dark'] .border-dashed.border-slate-300 {
+  border-color: rgba(148, 163, 184, 0.25) !important;
+}
+
+/* --- Version stat mini-cells (white inner bg) --- */
+:root[data-theme='dark'] .rounded-xl.bg-white {
+  background-color: rgba(19, 35, 58, 0.8) !important;
+}
+
+/* ============================================================
+   Comprehensive dark-mode overrides for all color variants.
+   ============================================================ */
+
+/* --- Text color variants (500/600/800/950) for all theme colors --- */
+:root[data-theme='dark'] .text-amber-100 { color: #fde68a !important; }
+:root[data-theme='dark'] .text-amber-200 { color: #fde68a !important; }
+:root[data-theme='dark'] .text-amber-500 { color: #fbbf24 !important; }
+:root[data-theme='dark'] .text-amber-600 { color: #fcd34d !important; }
+:root[data-theme='dark'] .text-amber-800,
+:root[data-theme='dark'] .text-amber-900,
+:root[data-theme='dark'] .text-amber-950 { color: #fcd34d !important; }
+
+:root[data-theme='dark'] .text-rose-200 { color: #fecaca !important; }
+:root[data-theme='dark'] .text-rose-500 { color: #fb7185 !important; }
+:root[data-theme='dark'] .text-rose-600,
+:root[data-theme='dark'] .text-rose-800,
+:root[data-theme='dark'] .text-rose-900 { color: #fda4af !important; }
+
+:root[data-theme='dark'] .text-emerald-200 { color: #a7f3d0 !important; }
+:root[data-theme='dark'] .text-emerald-500 { color: #34d399 !important; }
+:root[data-theme='dark'] .text-emerald-600 { color: #6ee7b7 !important; }
+:root[data-theme='dark'] .text-emerald-800,
+:root[data-theme='dark'] .text-emerald-900 { color: #6ee7b7 !important; }
+
+:root[data-theme='dark'] .text-sky-200 { color: #bae6fd !important; }
+:root[data-theme='dark'] .text-sky-500 { color: #38bdf8 !important; }
+:root[data-theme='dark'] .text-sky-600 { color: #7dd3fc !important; }
+:root[data-theme='dark'] .text-sky-800,
+:root[data-theme='dark'] .text-sky-900 { color: #7dd3fc !important; }
+
+:root[data-theme='dark'] .text-blue-500 { color: #60a5fa !important; }
+:root[data-theme='dark'] .text-blue-600 { color: #93c5fd !important; }
+:root[data-theme='dark'] .text-blue-800,
+:root[data-theme='dark'] .text-blue-900 { color: #93c5fd !important; }
+
+:root[data-theme='dark'] .text-violet-500 { color: #a78bfa !important; }
+:root[data-theme='dark'] .text-violet-600 { color: #c4b5fd !important; }
+:root[data-theme='dark'] .text-violet-800,
+:root[data-theme='dark'] .text-violet-900 { color: #c4b5fd !important; }
+
+/* --- Opacity-modified colored backgrounds (50/60..80) --- */
+:root[data-theme='dark'] .bg-amber-50\/60,
+:root[data-theme='dark'] .bg-amber-50\/70,
+:root[data-theme='dark'] .bg-amber-50\/80 {
+  background-color: rgba(245, 158, 11, 0.14) !important;
+}
+:root[data-theme='dark'] .bg-rose-50\/60,
+:root[data-theme='dark'] .bg-rose-50\/70,
+:root[data-theme='dark'] .bg-rose-50\/80 {
+  background-color: rgba(244, 63, 94, 0.14) !important;
+}
+:root[data-theme='dark'] .bg-emerald-50\/60,
+:root[data-theme='dark'] .bg-emerald-50\/70,
+:root[data-theme='dark'] .bg-emerald-50\/80 {
+  background-color: rgba(16, 185, 129, 0.14) !important;
+}
+:root[data-theme='dark'] .bg-violet-50\/60,
+:root[data-theme='dark'] .bg-violet-50\/70,
+:root[data-theme='dark'] .bg-violet-50\/80 {
+  background-color: rgba(139, 92, 246, 0.14) !important;
+}
+:root[data-theme='dark'] .bg-sky-50\/60,
+:root[data-theme='dark'] .bg-sky-50\/70,
+:root[data-theme='dark'] .bg-sky-50\/80 {
+  background-color: rgba(56, 160, 240, 0.14) !important;
+}
+:root[data-theme='dark'] .bg-blue-50\/60,
+:root[data-theme='dark'] .bg-blue-50\/70,
+:root[data-theme='dark'] .bg-blue-50\/80 {
+  background-color: rgba(56, 120, 200, 0.18) !important;
+}
+:root[data-theme='dark'] .bg-slate-50\/70 {
+  background-color: rgba(15, 23, 42, 0.82) !important;
+}
+:root[data-theme='dark'] .bg-slate-100\/60,
+:root[data-theme='dark'] .bg-slate-100\/70,
+:root[data-theme='dark'] .bg-slate-100\/80 {
+  background-color: rgba(30, 41, 59, 0.82) !important;
+}
+
+/* --- Opacity-modified white backgrounds (used in dark card children) --- */
+:root[data-theme='dark'] .bg-white\/5,
+:root[data-theme='dark'] .bg-white\/\[0\.06\] {
+  background-color: rgba(148, 163, 184, 0.08) !important;
+}
+:root[data-theme='dark'] .bg-white\/10,
+:root[data-theme='dark'] .bg-white\/15,
+:root[data-theme='dark'] .bg-white\/18 {
+  background-color: rgba(148, 163, 184, 0.1) !important;
+}
+
+/* --- Sky/blue-tinted backgrounds (non-editing hero panel) --- */
+:root[data-theme='dark'] .bg-sky-300\/10,
+:root[data-theme='dark'] .bg-sky-300\/20 {
+  background-color: rgba(56, 189, 248, 0.12) !important;
+}
+:root[data-theme='dark'] .bg-sky-400\/16 {
+  background-color: rgba(56, 189, 248, 0.22) !important;
+}
+
+/* --- White borders with opacity (used in dark card children) --- */
+:root[data-theme='dark'] .border-white\/20,
+:root[data-theme='dark'] .border-white\/25 {
+  border-color: rgba(148, 163, 184, 0.18) !important;
+}
+:root[data-theme='dark'] .border-white\/75 {
+  border-color: rgba(148, 163, 184, 0.22) !important;
+}
+
+/* --- Amber-300/400 borders (API key warning clear button) --- */
+:root[data-theme='dark'] .border-amber-300,
+:root[data-theme='dark'] .border-amber-400 {
+  border-color: rgba(245, 158, 11, 0.35) !important;
+}
+:root[data-theme='dark'] .hover\:bg-amber-100:hover,
+:root[data-theme='dark'] .hover\:border-amber-500\/30:hover {
+  background-color: rgba(245, 158, 11, 0.12) !important;
+  border-color: rgba(245, 158, 11, 0.3) !important;
+}
+
+/* --- Slate-300/400 backgrounds (section nav inactive dots) --- */
+:root[data-theme='dark'] .bg-slate-300,
+:root[data-theme='dark'] .bg-slate-300\/70,
+:root[data-theme='dark'] .bg-slate-300\/75 {
+  background-color: rgba(148, 163, 184, 0.45) !important;
+}
+:root[data-theme='dark'] .bg-slate-400 {
+  background-color: rgba(148, 163, 184, 0.7) !important;
+}
+:root[data-theme='dark'] .hover\:bg-slate-400:hover {
+  background-color: rgba(148, 163, 184, 0.85) !important;
+}
+
+/* --- Slate-500 backgrounds (used in slate badge indicators) --- */
+:root[data-theme='dark'] .bg-slate-500 {
+  background-color: rgba(148, 163, 184, 0.55) !important;
+}
+
+/* --- rose-500, emerald-500, etc. indicator dots stay vibrant --- */
+/* (no override needed; colors are visible in dark) */
+
+/* --- Shadow overrides for dark mode: replace dark shadows with subtle glow --- */
+:root[data-theme='dark'] .shadow-\[0_8px_18px_rgba\(15\2c 23\2c 42\2c 0\.035\)\] {
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.4) !important;
+}
+:root[data-theme='dark'] .shadow-\[0_24px_60px_rgba\(15\2c 23\2c 42\2c 0\.06\)\],
+:root[data-theme='dark'] .shadow-\[0_24px_60px_rgba\(15\2c 23\2c 42\2c 0\.16\)\] {
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5) !important;
+}
+:root[data-theme='dark'] .shadow-\[0_28px_80px_rgba\(15\2c 23\2c 42\2c 0\.14\)\],
+:root[data-theme='dark'] .shadow-\[0_28px_90px_rgba\(15\2c 23\2c 42\2c 0\.14\)\] {
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.55) !important;
+}
+:root[data-theme='dark'] .shadow-\[0_30px_70px_rgba\(15\2c 23\2c 42\2c 0\.22\)\],
+:root[data-theme='dark'] .shadow-\[0_30px_82px_rgba\(15\2c 23\2c 42\2c 0\.22\)\] {
+  box-shadow: 0 30px 82px rgba(0, 0, 0, 0.6) !important;
+}
+:root[data-theme='dark'] .shadow-\[0_32px_70px_rgba\(15\2c 23\2c 42\2c 0\.1\)\] {
+  box-shadow: 0 32px 70px rgba(0, 0, 0, 0.55) !important;
+}
+:root[data-theme='dark'] .shadow-\[0_40px_120px_rgba\(15\2c 23\2c 42\2c 0\.35\)\] {
+  box-shadow: 0 40px 120px rgba(0, 0, 0, 0.7) !important;
+}
+:root[data-theme='dark'] .shadow-\[0_18px_44px_rgba\(15\2c 23\2c 42\2c 0\.18\)\] {
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55) !important;
+}
+
+/* --- Hero section gradient background: dark variant --- */
+:root[data-theme='dark'] [data-section-bg='hero'] {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.6), rgba(8, 15, 29, 0.4)) !important;
+}
+
+/* --- Modal backdrop: lighter in dark mode for visibility --- */
+:root[data-theme='dark'] .bg-slate-950\/55 {
+  background-color: rgba(2, 6, 23, 0.78) !important;
+}
+
+/* --- PageShell bg-sky-400/16 (active theme button) --- */
+:root[data-theme='dark'] .bg-sky-400\/16 {
+  background-color: rgba(125, 211, 252, 0.22) !important;
+}
+
 .resume-ai-edited-text {
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
@@ -276,6 +623,7 @@ select {
   color: inherit;
 }
 
+.bg-slate-800 .resume-ai-edited-text,
 .bg-slate-950 .resume-ai-edited-text {
   background: rgba(180, 83, 9, 0.42);
   color: #fff7ed;

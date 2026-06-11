@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { ArrowDownRight, MapPin } from 'lucide-react';
 import type { BasicInfo } from '../../types/resume';
+import { useLanguageMode } from '../../hooks/useLanguageMode';
 import { EditableText } from '../editor/EditableText';
 import { formatCommaList, parseCommaList } from '../editor/list-format';
 import { useResumeEditor } from '../editor/ResumeEditorContext';
@@ -14,11 +15,12 @@ type HeroSectionProps = {
 
 export function HeroSection({ basics }: HeroSectionProps) {
   const { isEditing, updateResume } = useResumeEditor();
-  const positioningLine = basics.subtitle || basics.summary;
+  const { t } = useLanguageMode();
+  const positioningLine = basics.subtitle;
 
   const panelClass = isEditing
     ? 'border border-[var(--line)] bg-white/82 text-slate-900'
-    : 'border border-slate-900/80 bg-slate-950 text-white';
+    : 'border border-slate-700/80 bg-slate-800 text-white';
   const panelTagClass = isEditing
     ? 'border border-sky-200 bg-sky-50 text-sky-700'
     : 'border border-sky-300/20 bg-sky-300/10 text-sky-200';
@@ -37,22 +39,22 @@ export function HeroSection({ basics }: HeroSectionProps) {
     : 'mt-3 text-sm font-medium text-white';
   const panelTitleInputClass = isEditing
     ? 'max-w-md text-3xl font-semibold tracking-tight text-slate-950 sm:text-[2.15rem]'
-    : 'max-w-md border-white/15 bg-slate-900/80 text-3xl font-semibold tracking-tight text-white placeholder:text-slate-500 focus:border-sky-300 sm:text-[2.15rem]';
+    : 'max-w-md border-white/15 bg-slate-700/80 text-3xl font-semibold tracking-tight text-white placeholder:text-slate-400 focus:border-sky-300 sm:text-[2.15rem]';
   const panelBodyInputClass = isEditing
     ? 'max-w-lg text-sm font-medium leading-7 text-slate-700 sm:text-[15px]'
-    : 'max-w-lg border-white/12 bg-slate-900/70 text-sm font-medium leading-7 text-slate-100 placeholder:text-slate-500 focus:border-sky-300 sm:text-[15px]';
+    : 'max-w-lg border-white/12 bg-slate-700/70 text-sm font-medium leading-7 text-slate-100 placeholder:text-slate-400 focus:border-sky-300 sm:text-[15px]';
   const panelLocationInputClass = isEditing
     ? 'mt-3 text-sm font-medium text-slate-700'
-    : 'mt-3 border-white/15 bg-slate-900/80 text-sm font-medium text-white placeholder:text-slate-500 focus:border-sky-300';
+    : 'mt-3 border-white/15 bg-slate-700/80 text-sm font-medium text-white placeholder:text-slate-400 focus:border-sky-300';
 
   return (
     <section
       id="hero"
-      className="overflow-hidden border-b border-[var(--line)] bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(241,245,249,0.72))] px-3 py-8 sm:px-4 sm:py-10"
+      className="overflow-hidden border-b border-[var(--line)] bg-[var(--hero-bg)] px-3 py-8 sm:px-4 sm:py-10"
     >
       <Container>
-        <div className="relative rounded-[2rem] border border-white/75 bg-white/68 p-5 shadow-[0_28px_90px_rgba(15,23,42,0.14)] backdrop-blur-2xl sm:rounded-[2.35rem] sm:p-8 lg:p-10">
-          <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent" />
+        <div className="relative rounded-[2rem] border border-white/75 bg-white/68 p-5 shadow-[0_28px_90px_rgba(15,23,42,0.14)] backdrop-blur-2xl sm:rounded-[2.35rem] sm:p-8 lg:p-10 dark:border-white/15 dark:bg-[var(--surface)] dark:shadow-[0_28px_90px_rgba(0,0,0,0.5)]">
+          <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent dark:via-white/30" />
           <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
             <motion.div
               initial={{ opacity: 0, y: 28 }}
@@ -62,7 +64,7 @@ export function HeroSection({ basics }: HeroSectionProps) {
             >
               <div className="space-y-5">
                 <p className="text-xs font-semibold uppercase tracking-[0.32em] text-[var(--accent)]">
-                  个人简历
+                  {t('section.heroEyebrow')}
                 </p>
                 <div className="space-y-4">
                   <EditableText
@@ -98,7 +100,7 @@ export function HeroSection({ basics }: HeroSectionProps) {
                     }
                     multiline
                     rows={3}
-                    placeholder="补充一句定位或亮点描述"
+                    placeholder={t('editor.placeholderSubtitle')}
                     displayAs="p"
                     displayClassName="max-w-3xl text-lg leading-8 text-slate-600"
                     inputClassName="max-w-3xl text-lg leading-8 text-slate-600"
@@ -113,7 +115,7 @@ export function HeroSection({ basics }: HeroSectionProps) {
                     }
                     multiline
                     rows={4}
-                    placeholder="补充简历摘要"
+                    placeholder={t('editor.placeholderSummary')}
                     displayAs="p"
                     displayClassName="max-w-3xl text-base leading-8 text-slate-600 sm:text-lg"
                     inputClassName="max-w-3xl text-base leading-8 text-slate-600 sm:text-lg"
@@ -124,7 +126,7 @@ export function HeroSection({ basics }: HeroSectionProps) {
               {isEditing ? (
                 <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-                    关注标签
+                    {t('section.focusTags')}
                   </p>
                   <EditableText
                     value={formatCommaList(basics.focusTags)}
@@ -135,7 +137,7 @@ export function HeroSection({ basics }: HeroSectionProps) {
                     }
                     multiline
                     rows={2}
-                    placeholder="使用逗号分隔标签"
+                    placeholder={t('editor.placeholderFocusTags')}
                     inputClassName="text-sm text-slate-700"
                   />
                 </div>
@@ -162,7 +164,7 @@ export function HeroSection({ basics }: HeroSectionProps) {
                   panelClass,
                 ].join(' ')}
               >
-                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-sky-300/80 to-transparent" />
+                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-sky-300/80 to-transparent dark:via-sky-300/30" />
 
                 <div className="relative space-y-8 p-7 sm:p-8">
                   <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
@@ -174,7 +176,7 @@ export function HeroSection({ basics }: HeroSectionProps) {
                         ].join(' ')}
                       >
                         <span className="size-1.5 rounded-full bg-sky-300" />
-                        核心定位
+                        {t('section.corePositioning')}
                       </div>
                       <div className="space-y-3">
                         <EditableText
@@ -200,7 +202,7 @@ export function HeroSection({ basics }: HeroSectionProps) {
                           rows={3}
                           autoGrow
                           extraGrowRows={2}
-                          placeholder="补充定位说明"
+                          placeholder={t('editor.placeholderPositioning')}
                           displayAs="p"
                           displayClassName={panelBodyDisplayClass}
                           inputClassName={panelBodyInputClass}
@@ -222,7 +224,7 @@ export function HeroSection({ basics }: HeroSectionProps) {
                           ].join(' ')}
                         >
                           <MapPin className="size-3.5" />
-                          工作地点
+                          {t('section.workLocation')}
                         </div>
                         <EditableText
                           value={basics.location ?? ''}
@@ -231,7 +233,7 @@ export function HeroSection({ basics }: HeroSectionProps) {
                               draft.basics.location = value;
                             })
                           }
-                          placeholder="面议"
+                          placeholder={t('editor.contactPlaceholder')}
                           displayAs="p"
                           displayClassName={panelLocationDisplayClass}
                           inputClassName={panelLocationInputClass}
@@ -249,7 +251,7 @@ export function HeroSection({ basics }: HeroSectionProps) {
                             panelMetaLabelClass,
                           ].join(' ')}
                         >
-                          联系入口
+                          {t('section.contactEntry')}
                         </div>
                         <Button
                           href="#contact"
@@ -263,7 +265,7 @@ export function HeroSection({ basics }: HeroSectionProps) {
                               : '!text-white hover:bg-transparent hover:!text-white focus-visible:ring-white/60 focus-visible:ring-offset-slate-950',
                           ].join(' ')}
                         >
-                          联系方式
+                        {t('section.contactMethod')}
                         </Button>
                       </div>
                     </div>

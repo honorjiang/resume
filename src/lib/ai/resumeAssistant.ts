@@ -291,6 +291,9 @@ const INTERVIEW_PROMPTS_SCHEMA = {
   },
 } as const;
 
+import type { Language } from '../i18n/uiDict';
+import { languageDirective } from '../i18n/languageDirective';
+
 function cleanText(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -381,17 +384,21 @@ function buildAnthropicTool(schemaName: string, schema: Record<string, unknown>)
   };
 }
 
-async function requestViaOpenAiResponses<T>({
-  config,
-  operationLabel,
-  schemaName,
-  schema,
-  systemPrompt,
-  userPrompt,
-  maxOutputTokens = 2500,
-}: StructuredAiRequest): Promise<T> {
+async function requestViaOpenAiResponses<T>(
+  {
+    config,
+    operationLabel,
+    schemaName,
+    schema,
+    systemPrompt,
+    userPrompt,
+    maxOutputTokens = 2500,
+  }: StructuredAiRequest,
+  signal?: AbortSignal,
+): Promise<T> {
   const response = await fetch(buildOpenAiResponsesUrl(config.baseUrl), {
     method: 'POST',
+    signal,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${config.apiKey.trim()}`,
@@ -457,16 +464,20 @@ async function requestViaOpenAiResponses<T>({
   }
 }
 
-async function requestViaOpenAiCompatible<T>({
-  config,
-  operationLabel,
-  schemaName,
-  schema,
-  systemPrompt,
-  userPrompt,
-}: StructuredAiRequest): Promise<T> {
+async function requestViaOpenAiCompatible<T>(
+  {
+    config,
+    operationLabel,
+    schemaName,
+    schema,
+    systemPrompt,
+    userPrompt,
+  }: StructuredAiRequest,
+  signal?: AbortSignal,
+): Promise<T> {
   const response = await fetch(buildOpenAiCompatibleUrl(config.baseUrl), {
     method: 'POST',
+    signal,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${config.apiKey.trim()}`,
@@ -525,17 +536,21 @@ async function requestViaOpenAiCompatible<T>({
   }
 }
 
-async function requestViaAnthropicCompatible<T>({
-  config,
-  operationLabel,
-  schemaName,
-  schema,
-  systemPrompt,
-  userPrompt,
-  maxOutputTokens = 2500,
-}: StructuredAiRequest): Promise<T> {
+async function requestViaAnthropicCompatible<T>(
+  {
+    config,
+    operationLabel,
+    schemaName,
+    schema,
+    systemPrompt,
+    userPrompt,
+    maxOutputTokens = 2500,
+  }: StructuredAiRequest,
+  signal?: AbortSignal,
+): Promise<T> {
   const response = await fetch(buildAnthropicCompatibleUrl(config.baseUrl), {
     method: 'POST',
+    signal,
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': config.apiKey.trim(),
@@ -588,14 +603,15 @@ async function requestViaAnthropicCompatible<T>({
 async function requestStructuredAi<T>(
   provider: ResumeImportProvider,
   request: StructuredAiRequest,
+  signal?: AbortSignal,
 ) {
   switch (provider) {
     case 'openai-compatible':
-      return requestViaOpenAiCompatible<T>(request);
+      return requestViaOpenAiCompatible<T>(request, signal);
     case 'anthropic-compatible':
-      return requestViaAnthropicCompatible<T>(request);
+      return requestViaAnthropicCompatible<T>(request, signal);
     default:
-      return requestViaOpenAiResponses<T>(request);
+      return requestViaOpenAiResponses<T>(request, signal);
   }
 }
 
@@ -858,17 +874,24 @@ function buildTargetContext(targetRole?: string, jobDescription?: string) {
     .join('\n\n');
 }
 
-export async function polishResumeText({
-  config,
-  action,
-  value,
-  sectionLabel = 'Resume',
-  fieldLabel = 'Field',
-  contextHint = '',
-  format = 'paragraph',
-}: ResumeAiTextRequest) {
+export async function polishResumeText(
+  {
+    config,
+    action,
+    value,
+    sectionLabel = 'Resume',
+    fieldLabel = 'Field',
+    contextHint = '',
+    format = 'paragraph',
+    outputLanguage = 'zh',
+  }: ResumeAiTextRequest,
+  signal?: AbortSignal,
+) {
   const operationLabel = action === 'star' ? 'STAR 改写' : 'AI 润色';
-  const systemPrompt = action === 'star' ? PROMPT_POLISH_SYSTEM_STAR : PROMPT_POLISH_SYSTEM_DEFAULT;
+  const systemPrompt =
+    (action === 'star' ? PROMPT_POLISH_SYSTEM_STAR : PROMPT_POLISH_SYSTEM_DEFAULT) +
+    '\n\n' +
+    languageDirective(outputLanguage);
 
   const formatInstruction =
     format === 'short'
@@ -893,26 +916,34 @@ export async function polishResumeText({
     .filter(Boolean)
     .join('\n');
 
-  const payload = await requestStructuredAi<ResumeAiTextRewriteResult>(config.provider, {
-    config,
-    operationLabel,
-    schemaName: action === 'star' ? 'rewrite_star_text' : 'polish_resume_text',
-    schema: TEXT_REWRITE_SCHEMA as unknown as Record<string, unknown>,
-    systemPrompt,
-    userPrompt,
-    maxOutputTokens: 1800,
-  });
+  const payload = await requestStructuredAi<ResumeAiTextRewriteResult>(
+    config.provider,
+    {
+      config,
+      operationLabel,
+      schemaName: action === 'star' ? 'rewrite_star_text' : 'polish_resume_text',
+      schema: TEXT_REWRITE_SCHEMA as unknown as Record<string, unknown>,
+      systemPrompt,
+      userPrompt,
+      maxOutputTokens: 1800,
+    },
+    signal,
+  );
 
   return normalizeTextRewriteResult(payload);
 }
 
-export async function analyzeResumeAts({
-  config,
-  resumeJson,
-  targetRole,
-  jobDescription,
-}: ResumeAtsCheckRequest) {
-  const systemPrompt = PROMPT_ATS_SYSTEM;
+export async function analyzeResumeAts(
+  {
+    config,
+    resumeJson,
+    targetRole,
+    jobDescription,
+    outputLanguage = 'zh',
+  }: ResumeAtsCheckRequest,
+  signal?: AbortSignal,
+) {
+  const systemPrompt = PROMPT_ATS_SYSTEM + '\n\n' + languageDirective(outputLanguage);
 
   const userPrompt = [
     'Analyze this resume for ATS readiness.',
@@ -924,27 +955,35 @@ export async function analyzeResumeAts({
     .filter(Boolean)
     .join('\n');
 
-  const payload = await requestStructuredAi<ResumeAtsReport>(config.provider, {
-    config,
-    operationLabel: 'ATS 检查',
-    schemaName: 'resume_ats_report',
-    schema: ATS_REPORT_SCHEMA as unknown as Record<string, unknown>,
-    systemPrompt,
-    userPrompt,
-    maxOutputTokens: 3000,
-  });
+  const payload = await requestStructuredAi<ResumeAtsReport>(
+    config.provider,
+    {
+      config,
+      operationLabel: 'ATS 检查',
+      schemaName: 'resume_ats_report',
+      schema: ATS_REPORT_SCHEMA as unknown as Record<string, unknown>,
+      systemPrompt,
+      userPrompt,
+      maxOutputTokens: 3000,
+    },
+    signal,
+  );
 
   return normalizeAtsReport(payload);
 }
 
-export async function optimizeResumeForTargetRole({
-  config,
-  resumeJson,
-  targetRole,
-  jobDescription,
-  allowedPatchesJson,
-}: ResumeJobOptimizationRequest) {
-  const systemPrompt = PROMPT_OPTIMIZE_SYSTEM;
+export async function optimizeResumeForTargetRole(
+  {
+    config,
+    resumeJson,
+    targetRole,
+    jobDescription,
+    allowedPatchesJson,
+    outputLanguage = 'zh',
+  }: ResumeJobOptimizationRequest,
+  signal?: AbortSignal,
+) {
+  const systemPrompt = PROMPT_OPTIMIZE_SYSTEM + '\n\n' + languageDirective(outputLanguage);
 
   const userPrompt = [
     'Optimize this resume for the target role.',
@@ -961,15 +1000,19 @@ export async function optimizeResumeForTargetRole({
     .filter(Boolean)
     .join('\n');
 
-  const payload = await requestStructuredAi<ResumeOptimizationResult>(config.provider, {
-    config,
-    operationLabel: '岗位定向优化',
-    schemaName: 'resume_job_optimization',
-    schema: OPTIMIZATION_SCHEMA as unknown as Record<string, unknown>,
-    systemPrompt,
-    userPrompt,
-    maxOutputTokens: 3500,
-  });
+  const payload = await requestStructuredAi<ResumeOptimizationResult>(
+    config.provider,
+    {
+      config,
+      operationLabel: '岗位定向优化',
+      schemaName: 'resume_job_optimization',
+      schema: OPTIMIZATION_SCHEMA as unknown as Record<string, unknown>,
+      systemPrompt,
+      userPrompt,
+      maxOutputTokens: 3500,
+    },
+    signal,
+  );
 
   return normalizeOptimizationPatches(
     payload,
@@ -990,22 +1033,29 @@ export function buildResumeOptimizationCatalog(resume: ResumeProfile) {
   return buildOptimizationCandidates(resume);
 }
 
-export async function testResumeAiConnection(config: ResumeImportAiConfig) {
+export async function testResumeAiConnection(
+  config: ResumeImportAiConfig,
+  signal?: AbortSignal,
+) {
   const payload = await requestStructuredAi<{
     ok?: unknown;
     message?: unknown;
-  }>(config.provider, {
-    config,
-    operationLabel: 'AI 连接测试',
-    schemaName: 'resume_connection_test',
-    schema: CONNECTION_TEST_SCHEMA as unknown as Record<string, unknown>,
-    systemPrompt: [
-      'You validate that the structured JSON connection works.',
-      'Return ok=true and a short message. Do not request or infer any user data.',
-    ].join('\n'),
-    userPrompt: 'Return a minimal successful connection check response.',
-    maxOutputTokens: 120,
-  });
+  }>(
+    config.provider,
+    {
+      config,
+      operationLabel: 'AI 连接测试',
+      schemaName: 'resume_connection_test',
+      schema: CONNECTION_TEST_SCHEMA as unknown as Record<string, unknown>,
+      systemPrompt: [
+        'You validate that the structured JSON connection works.',
+        'Return ok=true and a short message. Do not request or infer any user data.',
+      ].join('\n'),
+      userPrompt: 'Return a minimal successful connection check response.',
+      maxOutputTokens: 120,
+    },
+    signal,
+  );
 
   return {
     ok: Boolean(payload.ok),
@@ -1013,13 +1063,20 @@ export async function testResumeAiConnection(config: ResumeImportAiConfig) {
   };
 }
 
-export async function extractResumeMaterials({
-  config,
-  resumeJson,
-}: {
-  config: ResumeImportAiConfig;
-  resumeJson: string;
-}): Promise<ResumeMaterialItem[]> {
+export async function extractResumeMaterials(
+  {
+    config,
+    resumeJson,
+    outputLanguage = 'zh',
+  }: {
+    config: ResumeImportAiConfig;
+    resumeJson: string;
+    outputLanguage?: Language;
+  },
+  signal?: AbortSignal,
+): Promise<ResumeMaterialItem[]> {
+  const systemPrompt = PROMPT_MATERIALS_SYSTEM + '\n\n' + languageDirective(outputLanguage);
+
   const userPrompt = [
     'Extract all achievement materials, project actions/outcomes, skills, and highlights from this resume.',
     'For each item, set evidenceLevel based on whether it contains measurable metrics.',
@@ -1028,15 +1085,19 @@ export async function extractResumeMaterials({
     resumeJson,
   ].join('\n');
 
-  const payload = await requestStructuredAi<{ materials: unknown[] }>(config.provider, {
-    config,
-    operationLabel: '素材提取',
-    schemaName: 'resume_materials',
-    schema: MATERIALS_SCHEMA as unknown as Record<string, unknown>,
-    systemPrompt: PROMPT_MATERIALS_SYSTEM,
-    userPrompt,
-    maxOutputTokens: 4000,
-  });
+  const payload = await requestStructuredAi<{ materials: unknown[] }>(
+    config.provider,
+    {
+      config,
+      operationLabel: '素材提取',
+      schemaName: 'resume_materials',
+      schema: MATERIALS_SCHEMA as unknown as Record<string, unknown>,
+      systemPrompt,
+      userPrompt,
+      maxOutputTokens: 4000,
+    },
+    signal,
+  );
 
   return normalizeMaterials(payload);
 }
@@ -1101,13 +1162,18 @@ function normalizeMaterials(payload: unknown): ResumeMaterialItem[] {
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
 }
 
-export async function extractResumeInterviewPrompts({
-  config,
-  resumeJson,
-}: {
-  config: ResumeImportAiConfig;
-  resumeJson: string;
-}): Promise<ResumeInterviewPrompt[]> {
+export async function extractResumeInterviewPrompts(
+  {
+    config,
+    resumeJson,
+    outputLanguage = 'zh',
+  }: {
+    config: ResumeImportAiConfig;
+    resumeJson: string;
+    outputLanguage?: Language;
+  },
+  signal?: AbortSignal,
+): Promise<ResumeInterviewPrompt[]> {
   const userPrompt = [
     'Generate interview follow-up prompts from this resume.',
     'Focus on claims in experience, project outcomes, highlights, and quantified achievements.',
@@ -1117,15 +1183,19 @@ export async function extractResumeInterviewPrompts({
     resumeJson,
   ].join('\n');
 
-  const payload = await requestStructuredAi<{ prompts: unknown[] }>(config.provider, {
-    config,
-    operationLabel: '面试追问提取',
-    schemaName: 'resume_interview_prompts',
-    schema: INTERVIEW_PROMPTS_SCHEMA as unknown as Record<string, unknown>,
-    systemPrompt: PROMPT_INTERVIEW_SYSTEM,
-    userPrompt,
-    maxOutputTokens: 4000,
-  });
+  const payload = await requestStructuredAi<{ prompts: unknown[] }>(
+    config.provider,
+    {
+      config,
+      operationLabel: '面试追问提取',
+      schemaName: 'resume_interview_prompts',
+      schema: INTERVIEW_PROMPTS_SCHEMA as unknown as Record<string, unknown>,
+      systemPrompt: PROMPT_INTERVIEW_SYSTEM + '\n\n' + languageDirective(outputLanguage),
+      userPrompt,
+      maxOutputTokens: 4000,
+    },
+    signal,
+  );
 
   return normalizeInterviewPrompts(payload);
 }

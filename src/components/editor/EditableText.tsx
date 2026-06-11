@@ -7,6 +7,7 @@ import {
   type ChangeEventHandler,
 } from 'react';
 import type { ResumeAiTextFormat } from '../../types/resume-ai';
+import { useLanguageMode } from '../../hooks/useLanguageMode';
 import { useResumeEditor } from './ResumeEditorContext';
 
 type EditableTextProps = {
@@ -61,6 +62,7 @@ export function EditableText({
     getAiEditedState,
     clearAiEditedField,
   } = useResumeEditor();
+  const { t } = useLanguageMode();
   const displayValue = value || placeholder || '';
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const aiActionKey = useId();
@@ -75,7 +77,7 @@ export function EditableText({
   );
   const isLocalAiEdited = aiEditedValue !== null && value === aiEditedValue;
   const localAiEditedLabel =
-    lastAiAction === 'star' ? 'AI 改写结果' : 'AI 润色结果';
+    lastAiAction === 'star' ? t('editor.aiRewrittenLabel') : t('editor.aiPolishedLabel');
   const isAiEdited = globalAiEditState.isAiEdited || isLocalAiEdited;
   const aiEditedLabel = globalAiEditState.label ?? localAiEditedLabel;
 
@@ -161,7 +163,7 @@ export function EditableText({
           placeholder={placeholder}
           style={autoGrow ? { overflow: 'hidden', resize: 'none' } : undefined}
           className={[
-            'w-full rounded-2xl border border-sky-200 bg-white/90 px-3 py-2 !text-slate-950 caret-slate-950 outline-none ring-0 transition placeholder:!text-slate-500 focus:border-sky-400',
+            'w-full rounded-2xl border border-sky-200 bg-white/90 px-3 py-2 text-[var(--ink)] caret-[var(--ink)] outline-none ring-0 transition placeholder:text-slate-500 focus:border-sky-400',
             isAiEdited ? 'resume-ai-edited-field' : undefined,
             inputClassName,
           ]
@@ -186,7 +188,7 @@ export function EditableText({
               ) : (
                 <Sparkles className="size-3.5" />
               )}
-              <span>AI 润色</span>
+              <span>{t('editor.aiPolish')}</span>
             </button>
             {allowStarRewrite ? (
               <button
@@ -202,7 +204,7 @@ export function EditableText({
                 ) : (
                   <Target className="size-3.5" />
                 )}
-                <span>STAR 改写</span>
+                <span>{t('editor.aiStar')}</span>
               </button>
             ) : null}
           </div>
@@ -219,7 +221,7 @@ export function EditableText({
         onChange={handleChange}
         placeholder={placeholder}
         className={[
-          'w-full rounded-2xl border border-sky-200 bg-white/90 px-3 py-2 !text-slate-950 caret-slate-950 outline-none ring-0 transition placeholder:!text-slate-500 focus:border-sky-400',
+          'w-full rounded-2xl border border-sky-200 bg-white/90 px-3 py-2 text-[var(--ink)] caret-[var(--ink)] outline-none ring-0 transition placeholder:text-slate-500 focus:border-sky-400',
           isAiEdited ? 'resume-ai-edited-field' : undefined,
           inputClassName,
         ]
@@ -244,7 +246,7 @@ export function EditableText({
             ) : (
               <Sparkles className="size-3.5" />
             )}
-            <span>AI 润色</span>
+            <span>{t('editor.aiPolish')}</span>
           </button>
         </div>
       ) : null}

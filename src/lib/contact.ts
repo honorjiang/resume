@@ -4,7 +4,7 @@ const EMAIL_PATTERN = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
 const URL_LIKE_PATTERN = /^(https?:\/\/|www\.|[a-z0-9-]+\.[a-z]{2,})/i;
 
 export function normalizeContactLabel(link: ContactLink) {
-  if (link.type === 'phone') {
+  if (link.type === 'phone' && !link.label) {
     return '手机';
   }
 

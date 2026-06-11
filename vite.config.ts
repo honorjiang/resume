@@ -67,5 +67,10 @@ function pdfTemplateFilesPlugin(): Plugin {
 // https://vite.dev/config/
 export default defineConfig({
   base: '/resume/',
+  server: {
+    port: 5173,
+    strictPort: true,
+    host: '127.0.0.1',
+  },
   plugins: [pdfTemplateFilesPlugin(), react(), tailwindcss()],
 })

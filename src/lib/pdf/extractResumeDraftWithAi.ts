@@ -3,6 +3,8 @@ import {
   PROMPT_RESUME_IMPORT_USER_PDF,
   PROMPT_RESUME_IMPORT_USER_TEXT,
 } from '../ai/prompts';
+import type { Language } from '../i18n/uiDict';
+import { languageDirective } from '../i18n/languageDirective';
 import type {
   ResumeDraft,
   ResumeImportAiConfig,
@@ -536,9 +538,13 @@ async function requestViaOpenAiResponses(
   file: File,
   fileData: string,
   rawText: string,
+  outputLanguage: Language,
+  signal?: AbortSignal,
 ) {
+  const systemPrompt = `${AI_SYSTEM_PROMPT}\n\n${languageDirective(outputLanguage)}`;
   const response = await fetch(buildOpenAiResponsesUrl(config.baseUrl), {
     method: 'POST',
+    signal,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${config.apiKey.trim()}`,
@@ -548,7 +554,7 @@ async function requestViaOpenAiResponses(
       input: [
         {
           role: 'system',
-          content: [{ type: 'input_text', text: AI_SYSTEM_PROMPT }],
+          content: [{ type: 'input_text', text: systemPrompt }],
         },
         {
           role: 'user',
@@ -626,9 +632,13 @@ async function requestViaOpenAiResponses(
 async function requestViaOpenAiCompatible(
   config: ResumeImportAiConfig,
   rawText: string,
+  outputLanguage: Language,
+  signal?: AbortSignal,
 ) {
+  const systemPrompt = `${AI_SYSTEM_PROMPT}\n\n${languageDirective(outputLanguage)}`;
   const response = await fetch(buildOpenAiCompatibleUrl(config.baseUrl), {
     method: 'POST',
+    signal,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${config.apiKey.trim()}`,
@@ -639,7 +649,7 @@ async function requestViaOpenAiCompatible(
       messages: [
         {
           role: 'system',
-          content: AI_SYSTEM_PROMPT,
+          content: systemPrompt,
         },
         {
           role: 'user',
@@ -690,9 +700,13 @@ async function requestViaOpenAiCompatible(
 async function requestViaAnthropicCompatible(
   config: ResumeImportAiConfig,
   rawText: string,
+  outputLanguage: Language,
+  signal?: AbortSignal,
 ) {
+  const systemPrompt = `${AI_SYSTEM_PROMPT}\n\n${languageDirective(outputLanguage)}`;
   const response = await fetch(buildAnthropicCompatibleUrl(config.baseUrl), {
     method: 'POST',
+    signal,
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': config.apiKey.trim(),
@@ -701,7 +715,7 @@ async function requestViaAnthropicCompatible(
     body: JSON.stringify({
       model: config.model.trim(),
       max_tokens: 4000,
-      system: AI_SYSTEM_PROMPT,
+      system: systemPrompt,
       messages: [
         {
           role: 'user',
@@ -747,6 +761,8 @@ type ExtractResumeDraftWithAiParams = {
   file: File;
   fileData: string;
   rawText: string;
+  outputLanguage?: Language;
+  signal?: AbortSignal;
 };
 
 async function routeByProvider(
@@ -755,14 +771,16 @@ async function routeByProvider(
   file: File,
   fileData: string,
   rawText: string,
+  outputLanguage: Language,
+  signal?: AbortSignal,
 ) {
   switch (provider) {
     case 'openai-compatible':
-      return requestViaOpenAiCompatible(config, rawText);
+      return requestViaOpenAiCompatible(config, rawText, outputLanguage, signal);
     case 'anthropic-compatible':
-      return requestViaAnthropicCompatible(config, rawText);
+      return requestViaAnthropicCompatible(config, rawText, outputLanguage, signal);
     default:
-      return requestViaOpenAiResponses(config, file, fileData, rawText);
+      return requestViaOpenAiResponses(config, file, fileData, rawText, outputLanguage, signal);
   }
 }
 
@@ -771,6 +789,16 @@ export async function extractResumeDraftWithAi({
   file,
   fileData,
   rawText,
+  outputLanguage = 'zh',
+  signal,
 }: ExtractResumeDraftWithAiParams) {
-  return routeByProvider(config.provider, config, file, fileData, rawText);
+  return routeByProvider(
+    config.provider,
+    config,
+    file,
+    fileData,
+    rawText,
+    outputLanguage,
+    signal,
+  );
 }

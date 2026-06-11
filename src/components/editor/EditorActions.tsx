@@ -1,4 +1,5 @@
 import { Plus, Trash2 } from 'lucide-react';
+import { useLanguageMode } from '../../hooks/useLanguageMode';
 import { Button } from '../ui/Button';
 
 type EditorSectionActionsProps = {
@@ -16,6 +17,8 @@ export function EditorSectionActions({
   isEmpty = false,
   emptyMessage,
 }: EditorSectionActionsProps) {
+  const { t } = useLanguageMode();
+
   if (!isEditing) {
     return null;
   }
@@ -23,9 +26,13 @@ export function EditorSectionActions({
   return (
     <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       {isEmpty ? (
-        <p className="text-sm text-slate-500">{emptyMessage ?? '当前还没有内容。'}</p>
+        <p className="text-sm text-slate-500">
+          {emptyMessage ?? t('editor.emptyMessage')}
+        </p>
       ) : (
-        <span className="text-sm text-slate-500">编辑模式下可以新增或删除当前模块内容。</span>
+        <span className="text-sm text-slate-500">
+          {t('editor.editModeHint')}
+        </span>
       )}
       <Button
         type="button"
@@ -49,6 +56,7 @@ export function EditorRemoveButton({
   onRemove,
   className,
 }: EditorRemoveButtonProps) {
+  const { t } = useLanguageMode();
   return (
     <Button
       type="button"
@@ -60,7 +68,7 @@ export function EditorRemoveButton({
         .join(' ')}
       icon={<Trash2 className="size-4" />}
     >
-      删除
+      {t('editor.delete')}
     </Button>
   );
 }

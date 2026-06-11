@@ -1,4 +1,5 @@
 import type { SkillGroup } from '../../types/resume';
+import { useLanguageMode } from '../../hooks/useLanguageMode';
 import { EditorRemoveButton, EditorSectionActions } from '../editor/EditorActions';
 import { EditableText } from '../editor/EditableText';
 import { formatCommaList, parseCommaList } from '../editor/list-format';
@@ -14,14 +15,15 @@ type SkillsSectionProps = {
 
 export function SkillsSection({ items }: SkillsSectionProps) {
   const { isEditing, updateResume, getAiEditedState } = useResumeEditor();
+  const { t } = useLanguageMode();
 
   return (
-    <Section id="skills" eyebrow="技能" title="技能矩阵" className="bg-white">
+    <Section id="skills" eyebrow={t('section.skillsEyebrow')} title={t('section.skills')} className="bg-white">
       <EditorSectionActions
         isEditing={isEditing}
-        addLabel="新增技能卡片"
+        addLabel={t('editor.addSkill')}
         isEmpty={!items.length}
-        emptyMessage="当前没有技能卡片，先新增一项。"
+        emptyMessage={t('editor.skillEmpty')}
         onAdd={() =>
           updateResume((draft) => {
             draft.skills.push(createSkillGroupDraft());
@@ -31,7 +33,7 @@ export function SkillsSection({ items }: SkillsSectionProps) {
 
       <div className="grid gap-4 lg:grid-cols-3">
         {items.map((group, index) => (
-          <Card key={group.category || index} className="h-full">
+          <Card key={`skill-${index}`} className="h-full">
             <div className="space-y-5">
               <div className="flex items-start justify-between gap-3">
                 <EditableText
@@ -68,7 +70,7 @@ export function SkillsSection({ items }: SkillsSectionProps) {
                   }
                   multiline
                   rows={4}
-                  placeholder="使用逗号分隔技能项"
+                  placeholder={t('editor.placeholderTags')}
                   inputClassName="text-sm text-slate-700"
                 />
               ) : (

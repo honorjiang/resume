@@ -45,7 +45,7 @@ export function SectionNav({ items, activeId }: SectionNavProps) {
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2',
                     isActive
                       ? 'size-3 bg-[var(--accent)] shadow-[0_0_0_4px_var(--accent-soft)]'
-                      : 'size-2.5 bg-slate-300/75 hover:bg-slate-400',
+                      : 'size-2.5 bg-slate-300/75 hover:bg-slate-400 dark:bg-[var(--nav-inactive)] dark:hover:bg-[var(--nav-inactive-hover)]',
                   ].join(' ')}
                 />
 

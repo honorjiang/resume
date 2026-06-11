@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RotateCcw } from 'lucide-react';
 import { ResumeEditorProvider } from './components/editor/ResumeEditorContext';
 import { Container } from './components/layout/Container';
@@ -6,8 +6,13 @@ import { PageShell } from './components/layout/PageShell';
 import { SectionNav } from './components/layout/SectionNav';
 import { ResumeDocument } from './components/resume/ResumeDocument';
 import { Button } from './components/ui/Button';
+import { ToastProvider, useToast } from './components/ui/Toast';
 import { resumeProfile } from './data/resume';
 import { useActiveSection } from './hooks/useActiveSection';
+import { useLanguageMode, type LanguageMode } from './hooks/useLanguageMode';
+import { applyGlossaryToProfile } from './lib/i18n/applyGlossary';
+import { translateResumeProfile } from './lib/i18n/translateResume';
+import { createAiRequest, isAbortError } from './lib/ai/aiRequest';
 import { useResumeImport } from './hooks/useResumeImport';
 import { useThemeMode } from './hooks/useThemeMode';
 import {
@@ -62,11 +67,16 @@ type AiEditedFieldMap = Record<string, ResumeAiEditedField>;
 
 const RESUME_DRAFT_STORAGE_KEY = 'resume-local-draft';
 const RESUME_VERSIONS_STORAGE_KEY = 'resume-role-versions';
+const RESUME_DRAFT_PREFIX = 'resume-draft-';
 const LEGACY_LAYOUT_OVERRIDE_STORAGE_KEY = 'resume-layout-overrides';
 const DEFAULT_RESUME_SNAPSHOT = JSON.stringify(resumeProfile);
 
 function cloneResumeProfile(source: ResumeProfile): ResumeProfile {
   return JSON.parse(JSON.stringify(source)) as ResumeProfile;
+}
+
+function draftKey(lang: string): string {
+  return lang === 'zh' ? RESUME_DRAFT_STORAGE_KEY : `${RESUME_DRAFT_PREFIX}${lang}`;
 }
 
 function loadStoredResumeDraft() {
@@ -81,6 +91,51 @@ function loadStoredResumeDraft() {
       : cloneResumeProfile(resumeProfile);
   } catch {
     return cloneResumeProfile(resumeProfile);
+  }
+}
+
+function loadStoredLangDraft(lang: string): ResumeProfile | null {
+  if (typeof window === 'undefined' || lang === 'zh') {
+    return null;
+  }
+
+  try {
+    const stored = window.localStorage.getItem(draftKey(lang));
+    return stored ? (JSON.parse(stored) as ResumeProfile) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 从 localStorage 中发现所有已保存的非 zh 语言草稿 key */
+function getStoredDraftLanguages(): string[] {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+
+  const languages: string[] = [];
+  for (let i = 0; i < window.localStorage.length; i += 1) {
+    const key = window.localStorage.key(i);
+    if (key && key.startsWith(RESUME_DRAFT_PREFIX)) {
+      const lang = key.slice(RESUME_DRAFT_PREFIX.length);
+      if (lang) languages.push(lang);
+    }
+  }
+  // 兼容旧版 resume-en-draft key
+  if (window.localStorage.getItem('resume-en-draft')) {
+    languages.push('en');
+  }
+  return languages;
+}
+
+/** 迁移旧版 resume-en-draft 到新 key */
+function migrateLegacyEnDraft(): void {
+  if (typeof window === 'undefined') return;
+  const legacyKey = 'resume-en-draft';
+  const legacy = window.localStorage.getItem(legacyKey);
+  if (legacy) {
+    window.localStorage.setItem(draftKey('en'), legacy);
+    window.localStorage.removeItem(legacyKey);
   }
 }
 
@@ -121,22 +176,29 @@ function downloadBlob(blob: Blob, fileName: string) {
   link.href = url;
   link.download = fileName;
   link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  window.setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
-function buildExportFileName(sourceName: string | undefined, templateId: PdfTemplateId) {
+function buildExportFileName(
+  sourceName: string | undefined,
+  templateId: PdfTemplateId,
+  language: LanguageMode,
+) {
   const baseName = sourceName?.replace(/\.pdf$/i, '') || 'resume';
-  return `${baseName}-${templateId}.pdf`;
+  return `${baseName}-${templateId}-${language}.pdf`;
 }
 
-function getAiEditedLabel(action: ResumeAiEditedField['action']) {
+function getAiEditedLabel(
+  action: ResumeAiEditedField['action'],
+  t: (key: import('./lib/i18n/uiDict').UIDictKey) => string,
+) {
   switch (action) {
     case 'star':
-      return 'AI 改写结果';
+      return t('editor.aiRewrittenLabel');
     case 'optimize':
-      return 'AI 优化结果';
+      return t('editor.aiOptimizedLabel');
     default:
-      return 'AI 润色结果';
+      return t('editor.aiPolishedLabel');
   }
 }
 
@@ -186,9 +248,16 @@ function applyOptimizationPatchesToResume(
 
 function App() {
   const [preview, setPreview] = useState<PreviewState | null>(null);
-  const [editableResume, setEditableResume] = useState<ResumeProfile>(
-    loadStoredResumeDraft,
-  );
+  const [profiles, setProfiles] = useState<Record<string, ResumeProfile>>(() => {
+    migrateLegacyEnDraft();
+    const zh = loadStoredResumeDraft();
+    const result: Record<string, ResumeProfile> = { zh };
+    for (const lang of getStoredDraftLanguages()) {
+      const draft = loadStoredLangDraft(lang);
+      if (draft) result[lang] = draft;
+    }
+    return result;
+  });
   const [resumeVersions, setResumeVersions] = useState<ResumeVersion[]>(
     loadStoredResumeVersions,
   );
@@ -202,28 +271,55 @@ function App() {
   const [activeAiActionLabel, setActiveAiActionLabel] =
     useState<ResumeAiTextAction | null>(null);
   const [aiEditedFields, setAiEditedFields] = useState<AiEditedFieldMap>({});
+  const [isTranslating, setIsTranslating] = useState(false);
+  const translationAbortRef = useRef<{ abort: () => void } | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] =
     useState<PdfTemplateId>(defaultPdfTemplateId);
+  // 每个 AI 动作维护自己的取消句柄。同一动作重复触发会自动取消上一次。
+  const aiAbortHandlesRef = useRef<Map<string, { abort: () => void }>>(new Map());
   const { activeId } = useActiveSection();
   const { themeMode, resolvedTheme, setThemeMode } = useThemeMode();
-  const resumeImport = useResumeImport(resumeProfile);
-  const activeResume = editableResume;
+  const { mode: languageMode, setMode: setLanguageMode, t } = useLanguageMode();
+  const resumeImport = useResumeImport(resumeProfile, languageMode);
+  const toast = useToast();
+  const activeResume = profiles[languageMode] ?? profiles.zh;
+  // 渲染层"显示版"：当切到非 zh 语言且该语言 profile 尚未由 AI 翻译（仍是 zh 的深拷贝）时，
+  // 对 en 走词库兜底翻译，其他语言直接显示中文原文。
+  // 已通过 AI 翻译的 profile 则原样使用。
+  const displayResume = useMemo(() => {
+    if (languageMode === 'zh') return activeResume;
+    const langProfile = profiles[languageMode];
+    // 该语言没有独立 profile，走 en 词库兜底或显示中文原文
+    if (!langProfile) {
+      if (languageMode === 'en') return applyGlossaryToProfile(profiles.zh, 'en');
+      return profiles.zh;
+    }
+    return activeResume;
+  }, [activeResume, profiles, languageMode]);
   const activeTemplate =
     pdfResumeTemplateMap[selectedTemplateId] ?? pdfResumeTemplates[0];
   const resumeSnapshot = useMemo(
-    () => JSON.stringify(editableResume),
-    [editableResume],
+    () => JSON.stringify(activeResume),
+    [activeResume],
   );
-  const hasResumeDraft = resumeSnapshot !== DEFAULT_RESUME_SNAPSHOT;
-  const hasLocalDraft = hasResumeDraft;
+  const hasResumeDraft = JSON.stringify(profiles.zh) !== DEFAULT_RESUME_SNAPSHOT;
+  const hasOtherDrafts = Object.entries(profiles).some(
+    ([lang, profile]) => lang !== 'zh' && profile != null,
+  );
+  // 任何一种语言偏离默认 → 显示"恢复默认"入口
+  const hasLocalDraft = hasResumeDraft || hasOtherDrafts;
   const hasImportedPdf = Boolean(pdfSource);
   const canViewPdf = true;
   const canExportPdf = true;
   const canUseAi = Boolean(resumeImport.config.apiKey.trim());
-  const exportFileName = buildExportFileName(pdfSource?.file.name, selectedTemplateId);
+  const exportFileName = buildExportFileName(
+    pdfSource?.file.name,
+    selectedTemplateId,
+    languageMode,
+  );
   const pdfSourceLabel = hasImportedPdf
-    ? `导入自 ${pdfSource?.file.name}`
-    : '使用内置 src/data/resume.ts 简历';
+    ? `${t('nav.import')} ${pdfSource?.file.name}`
+    : `src/data/resume.ts`;
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
@@ -232,18 +328,31 @@ function App() {
     window.localStorage.removeItem(LEGACY_LAYOUT_OVERRIDE_STORAGE_KEY);
   }, []);
 
+  // 同步所有语言草稿到 localStorage
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
 
-    if (resumeSnapshot === DEFAULT_RESUME_SNAPSHOT) {
+    // zh 草稿 → resume-local-draft
+    const zhSnapshot = JSON.stringify(profiles.zh);
+    if (zhSnapshot === DEFAULT_RESUME_SNAPSHOT) {
       window.localStorage.removeItem(RESUME_DRAFT_STORAGE_KEY);
-      return;
+    } else {
+      window.localStorage.setItem(RESUME_DRAFT_STORAGE_KEY, zhSnapshot);
     }
 
-    window.localStorage.setItem(RESUME_DRAFT_STORAGE_KEY, resumeSnapshot);
-  }, [resumeSnapshot]);
+    // 其他语言草稿 → resume-draft-{lang}
+    for (const [lang, profile] of Object.entries(profiles)) {
+      if (lang === 'zh') continue;
+      const key = draftKey(lang);
+      if (profile) {
+        window.localStorage.setItem(key, JSON.stringify(profile));
+      } else {
+        window.localStorage.removeItem(key);
+      }
+    }
+  }, [profiles]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -274,13 +383,102 @@ function App() {
     });
   }, []);
 
-  const updateResume = useCallback((updater: (draft: ResumeProfile) => void) => {
-    setEditableResume((current) => {
-      const draft = cloneResumeProfile(current);
-      updater(draft);
-      return draft;
-    });
-  }, []);
+  const setActiveResume = useCallback(
+    (updater: (current: ResumeProfile) => ResumeProfile) => {
+      setProfiles((prev) => {
+        const current = prev[languageMode] ?? prev.zh;
+        return { ...prev, [languageMode]: updater(current) };
+      });
+    },
+    [languageMode],
+  );
+
+  // 切换语言：
+  //   - 切到中文：直接用 zh profile
+  //   - 切到其他语言：先切 mode 立即让 UI 响应；
+  //     若已配置 API Key 且该语言尚无 profile，则触发 AI 翻译当前中文 → 目标语言
+  //   - 翻译失败 → 保留当前状态（en 走词库兜底，其他语言显示中文原文）
+  const handleLanguageModeChange = useCallback(
+    (next: LanguageMode) => {
+      if (next === languageMode) {
+        return;
+      }
+      setLanguageMode(next);
+
+      if (next === 'zh') {
+        return;
+      }
+
+      // 该语言已有 profile → 直接使用，不重复翻译
+      if (profiles[next]) {
+        return;
+      }
+
+      if (!resumeImport.config.apiKey.trim()) {
+        // 没 API Key → 静默不翻译，靠词库或中文原文兜底
+        return;
+      }
+
+      // 触发 AI 翻译
+      translationAbortRef.current?.abort();
+      const abortController = new AbortController();
+      translationAbortRef.current = { abort: () => abortController.abort() };
+
+      setIsTranslating(true);
+      const currentZh = profiles.zh;
+      const currentConfig = resumeImport.config;
+
+      translateResumeProfile({
+        zhProfile: currentZh,
+        config: currentConfig,
+        targetLanguage: next,
+        signal: abortController.signal,
+      })
+        .then((translated) => {
+          if (!abortController.signal.aborted) {
+            setProfiles((prev) => ({ ...prev, [next]: translated }));
+          }
+        })
+        .catch((error) => {
+          if (isAbortError(error) || abortController.signal.aborted) {
+            return;
+          }
+          const message =
+            error instanceof Error ? error.message : String(error);
+          toast.error(
+            t('translation.translationFailed'),
+            `${t('translation.translationFailedDetail')}（${message}）`,
+          );
+        })
+        .finally(() => {
+          if (translationAbortRef.current?.abort === abortController.abort) {
+            translationAbortRef.current = null;
+          }
+          if (!abortController.signal.aborted) {
+            setIsTranslating(false);
+          }
+        });
+    },
+    [
+      languageMode,
+      profiles,
+      resumeImport.config,
+      setLanguageMode,
+      toast,
+      t,
+    ],
+  );
+
+  const updateResume = useCallback(
+    (updater: (draft: ResumeProfile) => void) => {
+      setActiveResume((current) => {
+        const draft = cloneResumeProfile(current);
+        updater(draft);
+        return draft;
+      });
+    },
+    [setActiveResume],
+  );
 
   const markAiEditedFields = useCallback((entries: AiEditedFieldMap) => {
     if (!Object.keys(entries).length) {
@@ -325,7 +523,7 @@ function App() {
 
         return {
           isAiEdited: Boolean(matchedEntry),
-          label: matchedEntry ? getAiEditedLabel(matchedEntry[1].action) : null,
+          label: matchedEntry ? getAiEditedLabel(matchedEntry[1].action, t) : null,
         };
       }
 
@@ -340,11 +538,37 @@ function App() {
 
       return {
         isAiEdited: true,
-        label: getAiEditedLabel(matchedEntry.action),
+        label: getAiEditedLabel(matchedEntry.action, t),
       };
     },
-    [aiEditedFields],
+    [aiEditedFields, t],
   );
+
+  // 包装一个 AI 调用：取消同名上一次的、注册新句柄、抹掉 abort error
+  const runWithAbort = useCallback(
+    async <T,>(
+      actionKey: string,
+      fetcher: (signal: AbortSignal) => Promise<T>,
+      timeoutMs?: number,
+    ): Promise<T> => {
+      aiAbortHandlesRef.current.get(actionKey)?.abort();
+      const handle = createAiRequest(fetcher, { timeoutMs });
+      aiAbortHandlesRef.current.set(actionKey, handle);
+      try {
+        return await handle.promise;
+      } finally {
+        if (aiAbortHandlesRef.current.get(actionKey) === handle) {
+          aiAbortHandlesRef.current.delete(actionKey);
+        }
+      }
+    },
+    [],
+  );
+
+  const abortAiAction = useCallback((actionKey: string) => {
+    aiAbortHandlesRef.current.get(actionKey)?.abort();
+    aiAbortHandlesRef.current.delete(actionKey);
+  }, []);
 
   const runAiTextAction = useCallback(
     async ({
@@ -375,15 +599,21 @@ function App() {
         setActiveAiActionLabel(action);
 
         const { polishResumeText } = await import('./lib/ai/resumeAssistant');
-        const result = await polishResumeText({
-          config: resumeImport.config,
-          action,
-          value,
-          sectionLabel,
-          fieldLabel,
-          contextHint,
-          format,
-        });
+        const result = await runWithAbort(actionKey, (signal) =>
+          polishResumeText(
+            {
+              config: resumeImport.config,
+              action,
+              value,
+              sectionLabel,
+              fieldLabel,
+              contextHint,
+              format,
+              outputLanguage: languageMode,
+            },
+            signal,
+          ),
+        );
 
         if (fieldPath) {
           markAiEditedFields({
@@ -400,7 +630,7 @@ function App() {
         setActiveAiActionLabel(null);
       }
     },
-    [markAiEditedFields, resumeImport.config],
+    [markAiEditedFields, resumeImport.config, runWithAbort, languageMode],
   );
 
   const runAtsCheck = useCallback(
@@ -419,14 +649,20 @@ function App() {
         './lib/ai/resumeAssistant'
       );
 
-      return analyzeResumeAts({
-        config: resumeImport.config,
-        resumeJson: buildResumeAiSnapshot(activeResume),
-        targetRole,
-        jobDescription,
-      });
+      return runWithAbort('ats-check', (signal) =>
+        analyzeResumeAts(
+          {
+            config: resumeImport.config,
+            resumeJson: buildResumeAiSnapshot(activeResume),
+            targetRole,
+            jobDescription,
+            outputLanguage: languageMode,
+          },
+          signal,
+        ),
+      );
     },
-    [activeResume, resumeImport.config],
+    [activeResume, resumeImport.config, runWithAbort, languageMode],
   );
 
   const runJobOptimization = useCallback(
@@ -448,15 +684,21 @@ function App() {
       } = await import('./lib/ai/resumeAssistant');
       const catalog = buildResumeOptimizationCatalog(activeResume);
 
-      return optimizeResumeForTargetRole({
-        config: resumeImport.config,
-        resumeJson: buildResumeAiSnapshot(activeResume),
-        allowedPatchesJson: JSON.stringify(catalog, null, 2),
-        targetRole,
-        jobDescription,
-      });
+      return runWithAbort('job-optimization', (signal) =>
+        optimizeResumeForTargetRole(
+          {
+            config: resumeImport.config,
+            resumeJson: buildResumeAiSnapshot(activeResume),
+            allowedPatchesJson: JSON.stringify(catalog, null, 2),
+            targetRole,
+            jobDescription,
+            outputLanguage: languageMode,
+          },
+          signal,
+        ),
+      );
     },
-    [activeResume, resumeImport.config],
+    [activeResume, resumeImport.config, runWithAbort, languageMode],
   );
 
   const runExtractMaterials = useCallback(async () => {
@@ -468,11 +710,17 @@ function App() {
       './lib/ai/resumeAssistant'
     );
 
-    return extractResumeMaterials({
-      config: resumeImport.config,
-      resumeJson: buildResumeAiSnapshot(activeResume),
-    });
-  }, [activeResume, resumeImport.config]);
+    return runWithAbort('extract-materials', (signal) =>
+      extractResumeMaterials(
+        {
+          config: resumeImport.config,
+          resumeJson: buildResumeAiSnapshot(activeResume),
+          outputLanguage: languageMode,
+        },
+        signal,
+      ),
+    );
+  }, [activeResume, resumeImport.config, runWithAbort, languageMode]);
 
   const runExtractInterviewPrompts = useCallback(async () => {
     if (!resumeImport.config.apiKey.trim()) {
@@ -483,11 +731,17 @@ function App() {
       './lib/ai/resumeAssistant'
     );
 
-    return extractResumeInterviewPrompts({
-      config: resumeImport.config,
-      resumeJson: buildResumeAiSnapshot(activeResume),
-    });
-  }, [activeResume, resumeImport.config]);
+    return runWithAbort('extract-interview', (signal) =>
+      extractResumeInterviewPrompts(
+        {
+          config: resumeImport.config,
+          resumeJson: buildResumeAiSnapshot(activeResume),
+          outputLanguage: languageMode,
+        },
+        signal,
+      ),
+    );
+  }, [activeResume, resumeImport.config, runWithAbort, languageMode]);
 
   const runAiConnectionTest = useCallback(async () => {
     if (!resumeImport.config.apiKey.trim()) {
@@ -496,8 +750,12 @@ function App() {
 
     const { testResumeAiConnection } = await import('./lib/ai/resumeAssistant');
 
-    return testResumeAiConnection(resumeImport.config);
-  }, [resumeImport.config]);
+    return runWithAbort(
+      'connection-test',
+      (signal) => testResumeAiConnection(resumeImport.config, signal),
+      15000, // 连接测试只需短超时
+    );
+  }, [resumeImport.config, runWithAbort]);
 
   const applyJobOptimization = useCallback(
     (
@@ -559,7 +817,7 @@ function App() {
         return;
       }
 
-      setEditableResume(cloneResumeProfile(version.resume));
+      setActiveResume(() => cloneResumeProfile(version.resume));
       setAiEditedFields(
         Object.fromEntries(
           version.patches.map((patch) => [
@@ -584,35 +842,35 @@ function App() {
   const sectionNavItems = useMemo(
     () =>
       [
-        { id: 'hero', label: '首页', visible: true },
+        { id: 'hero', label: t('section.hero'), visible: true },
         {
           id: 'highlights',
-          label: '核心亮点',
+          label: t('section.highlights'),
           visible: isEditing || activeResume.highlights.length > 0,
         },
         {
           id: 'skills',
-          label: '技能矩阵',
+          label: t('section.skills'),
           visible: isEditing || activeResume.skills.length > 0,
         },
         {
           id: 'experience',
-          label: '工作经历',
+          label: t('section.experience'),
           visible: isEditing || activeResume.experience.length > 0,
         },
         {
           id: 'education',
-          label: '教育背景',
+          label: t('section.education'),
           visible: isEditing || activeResume.education.length > 0,
         },
         {
           id: 'certificates',
-          label: '证书荣誉',
+          label: t('section.certificates'),
           visible: isEditing || activeResume.certificates.length > 0,
         },
-        { id: 'contact', label: '联系信息', visible: true },
+        { id: 'contact', label: t('section.contact'), visible: true },
       ].filter((item) => item.visible),
-    [activeResume, isEditing],
+    [activeResume, isEditing, t],
   );
 
   const buildTemplatePdf = useCallback(async () => {
@@ -641,16 +899,15 @@ function App() {
 
       replacePreview({
         title: `${activeTemplate.name} PDF`,
-        subtitle: `${pdfSourceLabel}，基于当前编辑内容生成「${activeTemplate.name}」模板预览`,
+        subtitle: `${pdfSourceLabel} · ${activeTemplate.name}`,
         url,
         downloadName: exportFileName,
         generated: true,
       });
     } catch (error) {
-      console.error(error);
       const message =
         error instanceof Error ? error.message : 'Unknown PDF generation error.';
-      window.alert(`生成 PDF 失败：${message}`);
+      toast.error(t('toast.pdfGenerateError'), message);
     } finally {
       setIsGeneratingPdf(false);
     }
@@ -661,6 +918,7 @@ function App() {
     isGeneratingPdf,
     pdfSourceLabel,
     replacePreview,
+    toast,
   ]);
 
   const handleExportPdf = useCallback(async () => {
@@ -676,21 +934,20 @@ function App() {
       }
       downloadBlob(blob, exportFileName);
     } catch (error) {
-      console.error(error);
       const message =
         error instanceof Error ? error.message : 'Unknown PDF export error.';
-      window.alert(`导出 PDF 失败：${message}`);
+      toast.error(t('toast.pdfExportError'), message);
     } finally {
       setIsGeneratingPdf(false);
     }
-  }, [buildTemplatePdf, exportFileName, isGeneratingPdf]);
+  }, [buildTemplatePdf, exportFileName, isGeneratingPdf, toast]);
 
   const handleApplyImportedResume = useCallback(() => {
     if (!resumeImport.review) {
       return;
     }
 
-    setEditableResume(cloneResumeProfile(resumeImport.review.resume));
+    setActiveResume(() => cloneResumeProfile(resumeImport.review.resume));
     setAiEditedFields({});
     setPdfSource({
       file: resumeImport.review.file,
@@ -701,7 +958,9 @@ function App() {
   }, [replacePreview, resumeImport.review]);
 
   const handleRestoreDefault = useCallback(() => {
-    setEditableResume(cloneResumeProfile(resumeProfile));
+    // 恢复默认：清空所有语言 profile，仅保留中文 master 数据
+    setLanguageMode('zh');
+    setProfiles({ zh: cloneResumeProfile(resumeProfile) });
     setAiEditedFields({});
     setPdfSource(null);
     replacePreview(null);
@@ -709,7 +968,7 @@ function App() {
     setApplicationTrackerOpen(false);
     setIsEditing(false);
     setSelectedTemplateId(defaultPdfTemplateId);
-  }, [replacePreview]);
+  }, [setLanguageMode]);
 
   return (
     <ResumeEditorProvider
@@ -761,6 +1020,8 @@ function App() {
           onOpenApplicationTracker={() => setApplicationTrackerOpen(true)}
           onRestoreDefault={handleRestoreDefault}
           onThemeModeChange={setThemeMode}
+          onLanguageModeChange={handleLanguageModeChange}
+          showLanguageToggle={canUseAi}
           onToggleEditing={() => setIsEditing((current) => !current)}
         >
           <main className="pt-[3.75rem] sm:pt-[3.75rem] lg:pt-[3.75rem]">
@@ -770,12 +1031,10 @@ function App() {
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                       <p className="text-sm font-semibold text-emerald-800">
-                        当前展示的是保存在浏览器本地的简历草稿。
+                        {t('draftBanner.title')}
                       </p>
                       <p className="mt-1 text-sm text-emerald-700">
-                        页面编辑内容会保存在当前浏览器中，不会直接修改
-                        <code> src/data/resume.ts </code>
-                        里的默认数据。
+                        {t('draftBanner.description')}
                       </p>
                     </div>
                     <Button
@@ -784,15 +1043,33 @@ function App() {
                       onClick={handleRestoreDefault}
                       icon={<RotateCcw className="size-4" />}
                     >
-                      恢复默认简历
+                      {t('nav.restore')}
                     </Button>
                   </div>
                 </Container>
               </section>
             ) : null}
 
+            {isTranslating ? (
+              <section className="no-print border-b border-[var(--line)] bg-blue-50/70 py-4">
+                <Container>
+                  <div className="flex items-center gap-3">
+                    <div className="size-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                    <div>
+                      <p className="text-sm font-semibold text-blue-800">
+                        {t('translation.translatingTitle')}
+                      </p>
+                      <p className="mt-1 text-sm text-blue-700">
+                        {t('translation.translatingDescription')}
+                      </p>
+                    </div>
+                  </div>
+                </Container>
+              </section>
+            ) : null}
+
             <ResumeDocument
-              resume={activeResume}
+              resume={displayResume}
               isEditing={isEditing}
             />
           </main>
@@ -843,6 +1120,8 @@ function App() {
               onDeleteVersion={deleteResumeVersion}
               onExtractMaterials={runExtractMaterials}
               onExtractInterviewPrompts={runExtractInterviewPrompts}
+              onAbortAiAction={abortAiAction}
+              onClearApiKey={resumeImport.clearApiKey}
             />
           ) : null}
 
@@ -859,4 +1138,12 @@ function App() {
   );
 }
 
-export default App;
+function AppWithToast() {
+  return (
+    <ToastProvider>
+      <App />
+    </ToastProvider>
+  );
+}
+
+export default AppWithToast;

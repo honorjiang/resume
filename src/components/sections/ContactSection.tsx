@@ -2,6 +2,7 @@ import { ArrowUpRight } from 'lucide-react';
 import { normalizeContactHref, normalizeContactLabel } from '../../lib/contact';
 import { getContactIcon } from '../../lib/icons';
 import type { ContactLink } from '../../types/resume';
+import { useLanguageMode } from '../../hooks/useLanguageMode';
 import { EditorRemoveButton, EditorSectionActions } from '../editor/EditorActions';
 import { EditableText } from '../editor/EditableText';
 import { createContactDraft } from '../editor/resume-draft-factories';
@@ -15,14 +16,15 @@ type ContactSectionProps = {
 
 export function ContactSection({ links }: ContactSectionProps) {
   const { isEditing, updateResume } = useResumeEditor();
+  const { t } = useLanguageMode();
 
   return (
-    <Section id="contact" eyebrow="联系" title="联系方式" className="bg-white !pb-12 sm:!pb-16">
+    <Section id="contact" eyebrow={t('section.contactEyebrow')} title={t('section.contact')} className="bg-white !pb-12 sm:!pb-16">
       <EditorSectionActions
         isEditing={isEditing}
-        addLabel="新增联系方式卡片"
+        addLabel={t('editor.addContact')}
         isEmpty={!links.length}
-        emptyMessage="当前没有联系方式卡片，先新增一项。"
+        emptyMessage={t('editor.contactEmpty')}
         onAdd={() =>
           updateResume((draft) => {
             draft.contactLinks.push(createContactDraft());
@@ -89,7 +91,7 @@ export function ContactSection({ links }: ContactSectionProps) {
                           draft.contactLinks[index].href = value || undefined;
                         })
                       }
-                      placeholder="链接地址，可留空"
+                      placeholder={t('editor.placeholderContactHref')}
                       inputClassName="text-sm text-slate-500"
                     />
                   ) : null}
@@ -102,12 +104,12 @@ export function ContactSection({ links }: ContactSectionProps) {
           );
 
           if (!normalizedHref || isEditing) {
-            return <div key={`${link.label}-${index}`}>{content}</div>;
+            return <div key={`contact-${index}`}>{content}</div>;
           }
 
           return (
             <a
-              key={`${link.label}-${index}`}
+              key={`contact-${index}`}
               href={normalizedHref}
               target={normalizedHref.startsWith('http') ? '_blank' : undefined}
               rel={normalizedHref.startsWith('http') ? 'noreferrer' : undefined}

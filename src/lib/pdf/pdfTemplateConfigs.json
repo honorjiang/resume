@@ -3,7 +3,7 @@
     "id": "modern",
     "name": "现代双栏",
     "version": "v7",
-    "description": "标准 A4 双栏模板，左栏保留短能力摘要，右侧展示职业概述、亮点和工作经历，避免窄栏承载长联系方式。",
+    "description": "左栏短摘要 + 右栏经历，强排版。",
     "blocks": [
       { "key": "name", "pageIndex": 0, "xMm": 75, "yMm": 20, "widthMm": 110, "heightMm": 12, "fontSize": 24, "lineHeight": 28, "bold": true, "color": "#0f172a" },
       { "key": "title", "pageIndex": 0, "xMm": 75, "yMm": 36, "widthMm": 110, "heightMm": 8, "fontSize": 11.2, "lineHeight": 13, "color": "#475569" },
