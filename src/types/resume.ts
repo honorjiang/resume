@@ -30,8 +30,8 @@ export interface Highlight {
 export interface ExperienceItem {
   id?: string;
   company: string;
-  role: string;
-  period: string;
+  role?: string;
+  period?: string;
   location?: string;
   summary?: string;
   achievements: string[];
@@ -42,10 +42,10 @@ export interface ExperienceItem {
 export interface ProjectItem {
   id?: string;
   name: string;
-  role: string;
+  role?: string;
   period?: string;
   summary?: string;
-  background: string;
+  background?: string;
   actions: string[];
   outcomes: string[];
   tags?: string[];
@@ -59,9 +59,9 @@ export interface SkillGroup {
 
 export interface EducationItem {
   school: string;
-  degree: string;
+  degree?: string;
   major?: string;
-  period: string;
+  period?: string;
 }
 
 export interface CertificateItem {

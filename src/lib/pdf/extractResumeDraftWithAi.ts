@@ -355,17 +355,15 @@ function buildDraft(payload: AiResumePayload, rawText: string): ResumeDraft {
             const source =
               item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
             const company = cleanText(source.company);
-            const role = cleanText(source.role);
-            const period = cleanText(source.period);
 
-            if (!company || !role || !period) {
+            if (!company) {
               return null;
             }
 
             return {
               company,
-              role,
-              period,
+              role: cleanOptionalText(source.role),
+              period: cleanOptionalText(source.period),
               location: cleanOptionalText(source.location),
               summary: cleanOptionalText(source.summary),
               achievements: cleanStringArray(source.achievements),
@@ -381,20 +379,18 @@ function buildDraft(payload: AiResumePayload, rawText: string): ResumeDraft {
             const source =
               item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
             const name = cleanText(source.name);
-            const role = cleanText(source.role);
-            const background = cleanText(source.background);
 
-            if (!name || !role || !background) {
+            if (!name) {
               return null;
             }
 
             return {
               id: cleanOptionalText(source.id),
               name,
-              role,
+              role: cleanOptionalText(source.role),
               period: cleanOptionalText(source.period),
               summary: cleanOptionalText(source.summary),
-              background,
+              background: cleanOptionalText(source.background),
               actions: cleanStringArray(source.actions),
               outcomes: cleanStringArray(source.outcomes),
               tags: cleanStringArray(source.tags),
@@ -425,18 +421,16 @@ function buildDraft(payload: AiResumePayload, rawText: string): ResumeDraft {
             const source =
               item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
             const school = cleanText(source.school);
-            const degree = cleanText(source.degree);
-            const period = cleanText(source.period);
 
-            if (!school || !degree || !period) {
+            if (!school) {
               return null;
             }
 
             return {
               school,
-              degree,
+              degree: cleanOptionalText(source.degree),
               major: cleanOptionalText(source.major),
-              period,
+              period: cleanOptionalText(source.period),
             };
           })
           .filter((item): item is NonNullable<typeof item> => item !== null)
