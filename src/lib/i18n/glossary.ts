@@ -72,7 +72,6 @@ export const zhEnGlossary: Record<string, string> = {
 
   // —— 技能分类（短文本，常独立出现）——
   'AI 战略与管理': 'AI Strategy & Management',
-  '大模型平台': 'LLM Platform',
   '系统架构与工程': 'System Architecture & Engineering',
   '数据与知识工程': 'Data & Knowledge Engineering',
   '研发效能与交付': 'R&D Efficiency & Delivery',
@@ -126,7 +125,6 @@ export const zhEnGlossary: Record<string, string> = {
   '系统设计': 'System Design',
   '服务治理': 'Service Governance',
   '团队带教': 'Mentoring',
-  '大模型中台': 'LLM Platform',
   'RAG': 'RAG',
   'Agent': 'Agent',
   '模型服务': 'Model Serving',
@@ -171,7 +169,6 @@ export const zhEnGlossary: Record<string, string> = {
   '30+ 人': '30+ people',
   '12 人': '12 people',
   '30 余人': '30+ people',
-  '30+ 人': '30+ people',
   '2 周': '2 weeks',
   '3 个月': '3 months',
   '个月': ' months',

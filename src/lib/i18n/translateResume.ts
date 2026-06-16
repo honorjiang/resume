@@ -11,7 +11,7 @@
 import { createAiRequest } from '../ai/aiRequest';
 import { getLanguageName } from './languageDirective';
 import type { ResumeImportAiConfig } from '../../types/resume-import';
-import type { ResumeProfile } from '../../types/resume';
+import type { ResumeProfile, ContactLink } from '../../types/resume';
 
 function buildTranslationSystemPrompt(targetLang: string): string {
   const langName = getLanguageName(targetLang);
@@ -367,17 +367,21 @@ function buildTranslatedProfile(payload: unknown, source: ResumeProfile): Resume
       }))
     : [];
 
-  const contactLinks = Array.isArray(data.contactLinks)
+  const contactLinks: ContactLink[] = Array.isArray(data.contactLinks)
     ? data.contactLinks.map((item) => {
-        const type = item.type;
+        const rawType = item.type;
+        const type =
+          rawType === 'email' ||
+          rawType === 'phone' ||
+          rawType === 'url' ||
+          rawType === 'text'
+            ? rawType
+            : undefined;
         return {
           label: cleanText(item.label),
           value: cleanText(item.value),
           href: cleanOptionalText(item.href),
-          type:
-            type === 'email' || type === 'phone' || type === 'url' || type === 'text'
-              ? type
-              : undefined,
+          type,
         };
       })
     : [];

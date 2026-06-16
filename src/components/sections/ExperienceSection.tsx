@@ -797,7 +797,9 @@ export function ExperienceSection({
                           if (!exp.relatedProjectIds) {
                             exp.relatedProjectIds = [];
                           }
-                          exp.relatedProjectIds.push(newProject.id);
+                          if (newProject.id) {
+                            exp.relatedProjectIds.push(newProject.id);
+                          }
                         }
                       }
                     })

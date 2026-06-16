@@ -15,7 +15,7 @@ import { zhEnGlossary } from './glossary';
 import type { ResumeProfile } from '../../types/resume';
 
 // 分隔符保留型切分：分隔符单独成 token，方便"片段命中、分隔符原样"拼接
-const SPLIT_PATTERN = /([，。、；：\s,.!?;:()（）/／—\-])/;
+const SPLIT_PATTERN = /([，。、；：\s,.!?;:()（）/／—-])/;
 
 /**
  * 单文本兜底翻译（仅 en 有词库）
