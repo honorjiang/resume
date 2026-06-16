@@ -27,6 +27,7 @@ export const uiDict = {
     previewPdf: { zh: '预览 PDF', en: 'Preview PDF' },
     exportingPdf: { zh: '生成中...', en: 'Generating...' },
     exportPdf: { zh: '导出 PDF', en: 'Export PDF' },
+    exportMarkdown: { zh: '导出 Markdown', en: 'Export Markdown' },
     restore: { zh: '恢复默认简历', en: 'Restore Default' },
     moreTitle: { zh: '更多操作', en: 'More' },
     pdfTemplate: { zh: 'PDF 模板', en: 'PDF Template' },
@@ -216,6 +217,15 @@ export const uiDict = {
     atsCheck: { zh: 'ATS 检查', en: 'ATS Check' },
     cancelCheck: { zh: '取消分析', en: 'Cancel' },
     generateRoleVersion: { zh: '生成岗位版本', en: 'Generate role version' },
+    generateRoleVersionQuick: {
+      zh: '一键优化并保存版本',
+      en: 'One-click optimize & save',
+    },
+    quickMode: { zh: '快速模式', en: 'Quick mode' },
+    quickModeHint: {
+      zh: '跳过逐条审核：AI 生成改动后直接全部应用并保存版本。',
+      en: 'Skip per-patch review: apply all AI changes and save a version directly.',
+    },
     cancelOptimization: { zh: '取消优化', en: 'Cancel' },
     versionManager: { zh: '岗位版本管理', en: 'Role versions' },
     versionManagerDescription: {
@@ -508,6 +518,16 @@ export const uiDict = {
     importConfig: { zh: 'AI 导入配置', en: 'AI import config' },
     keySavedInSession: { zh: 'API Key 仅保存在当前浏览器会话中。', en: 'API Key is saved in the current browser session only.' },
     choosePdf: { zh: '选择 PDF', en: 'Choose PDF' },
+    pasteTextToggle: { zh: '粘贴文本', en: 'Paste text' },
+    pasteTextLabel: {
+      zh: '粘贴简历文本 / Markdown',
+      en: 'Paste resume text / Markdown',
+    },
+    pasteTextPlaceholder: {
+      zh: '在此粘贴整份简历的纯文本或 Markdown，AI 会提取为结构化数据…',
+      en: 'Paste the full resume text or Markdown here, AI will extract it into structured data…',
+    },
+    parseText: { zh: '解析文本', en: 'Parse text' },
     processing: { zh: '处理中...', en: 'Processing...' },
     clearResult: { zh: '清空结果', en: 'Clear result' },
     applyToCurrent: { zh: '应用到当前页面', en: 'Apply to current page' },
@@ -560,6 +580,8 @@ export const uiDict = {
   toast: {
     pdfGenerateError: { zh: '生成 PDF 失败', en: 'Failed to generate PDF' },
     pdfExportError: { zh: '导出 PDF 失败', en: 'Failed to export PDF' },
+    markdownExported: { zh: '已导出 Markdown', en: 'Exported Markdown' },
+    markdownExportError: { zh: '导出 Markdown 失败', en: 'Failed to export Markdown' },
   },
 
   // ============================================================

@@ -438,6 +438,8 @@ export function ResumeAiWorkbenchModal({
   const [optimizationMeta, setOptimizationMeta] = useState<AiRunMeta | undefined>();
   const [materialsMeta, setMaterialsMeta] = useState<AiRunMeta | undefined>();
   const [interviewMeta, setInterviewMeta] = useState<AiRunMeta | undefined>();
+  /** 快速模式：开启后跳过逐条审核，生成即应用并保存版本 */
+  const [quickMode, setQuickMode] = useState(false);
 
   const isBusy =
     isCheckingAts ||
@@ -691,6 +693,61 @@ export function ResumeAiWorkbenchModal({
     }
   }
 
+  /**
+   * 快速模式：跳过逐条审核，AI 生成 patch 后直接全部应用并保存版本。
+   * 与逐条审核共享同一条「生成 → 应用 → 存版本」管线，只是省去人工勾选步骤。
+   * 空 patch 守卫：若 AI 判定没有值得改写的内容，不存空版本，提示用户。
+   */
+  async function handleQuickOptimization() {
+    if (!hasApiKey) {
+      toast.warning(t('ai.setKeyFirstOptimize'));
+      return;
+    }
+
+    if (!targetRole.trim()) {
+      toast.warning(t('ai.setKeyFirstOptimizeTarget'));
+      return;
+    }
+
+    try {
+      setIsOptimizing(true);
+      const nextResult = await onRunJobOptimization({
+        targetRole: targetRole.trim(),
+        jobDescription: jobDescription.trim() || undefined,
+      });
+
+      if (!nextResult.patches.length) {
+        setOptimizationResult(nextResult);
+        setAcceptedPatchKeys([]);
+        setOptimizationMeta({
+          generatedAt: new Date().toISOString(),
+          snapshot: resumeFingerprint,
+          emptyMessage: t('ai.noWorthwhileRewrites'),
+        });
+        toast.warning(t('ai.noWorthwhileRewrites'));
+        return;
+      }
+
+      setIsApplying(true);
+      onApplyOptimization(nextResult, {
+        jobDescription,
+        atsScore: atsReport?.overallScore,
+      });
+      toast.success(
+        t('ai.appliedOptimization').replace('{n}', String(nextResult.patches.length)),
+      );
+      window.setTimeout(() => {
+        onClose();
+      }, 220);
+    } catch (error) {
+      if (isAbortError(error)) return;
+      toast.error(t('ai.optimizeFailed'), error instanceof Error ? error.message : t('ai.retryLater'));
+    } finally {
+      setIsOptimizing(false);
+      setIsApplying(false);
+    }
+  }
+
   function togglePatch(patch: ResumeOptimizationPatch) {
     const key = patchKey(patch);
     setAcceptedPatchKeys((current) =>
@@ -898,7 +955,7 @@ export function ResumeAiWorkbenchModal({
               </label>
             </div>
 
-            <div className="mt-5 flex flex-wrap gap-3">
+            <div className="mt-5 flex flex-wrap items-center gap-3">
               <Button
                 variant={isCheckingAts ? 'ghost' : 'secondary'}
                 size="sm"
@@ -928,6 +985,10 @@ export function ResumeAiWorkbenchModal({
                     onAbortAiAction('job-optimization');
                     return;
                   }
+                  if (quickMode) {
+                    void handleQuickOptimization();
+                    return;
+                  }
                   void handleOptimization();
                 }}
                 disabled={(isBusy && !isOptimizing) || (!isOptimizing && !hasApiKey)}
@@ -939,8 +1000,25 @@ export function ResumeAiWorkbenchModal({
                   )
                 }
               >
-                {isOptimizing ? t('ai.cancelOptimization') : t('ai.generateRoleVersion')}
+                {isOptimizing
+                  ? t('ai.cancelOptimization')
+                  : quickMode
+                    ? t('ai.generateRoleVersionQuick')
+                    : t('ai.generateRoleVersion')}
               </Button>
+
+              <label className="ml-auto inline-flex cursor-pointer select-none items-center gap-2 text-xs font-medium text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={quickMode}
+                  onChange={(event) => setQuickMode(event.target.checked)}
+                  className="size-4 rounded border-slate-300 text-slate-950 focus:ring-slate-400"
+                />
+                <span>{t('ai.quickMode')}</span>
+                <span className="text-slate-400" title={t('ai.quickModeHint')}>
+                  ⓘ
+                </span>
+              </label>
             </div>
 
             <div className="mt-5 grid gap-3 lg:grid-cols-2">
@@ -1111,7 +1189,7 @@ export function ResumeAiWorkbenchModal({
             ) : null}
           </Card>
 
-          {optimizationResult ? (
+          {optimizationResult && !quickMode ? (
             <Card className={['bg-white', panelVisibility(activeTab, 'versions')].join(' ')}>
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>

@@ -32,6 +32,7 @@ type PageShellProps = {
   showImport: boolean;
   showViewPdf: boolean;
   showExportPdf: boolean;
+  showExportMarkdown: boolean;
   showTemplateSelect: boolean;
   showAiWorkbench: boolean;
   showApplicationTracker: boolean;
@@ -54,6 +55,7 @@ type PageShellProps = {
   onToggleEditing: () => void;
   onTemplateChange: (templateId: PdfTemplateId) => void;
   onExportPdf: () => void;
+  onExportMarkdown: () => void;
   onViewPdf: () => void;
   children: ReactNode;
 };
@@ -213,6 +215,7 @@ export function PageShell({
   showImport,
   showViewPdf,
   showExportPdf,
+  showExportMarkdown,
   showTemplateSelect,
   showAiWorkbench,
   showApplicationTracker,
@@ -231,6 +234,7 @@ export function PageShell({
   onToggleEditing,
   onTemplateChange,
   onExportPdf,
+  onExportMarkdown,
   onViewPdf,
   children,
 }: PageShellProps) {
@@ -550,7 +554,8 @@ export function PageShell({
                           </div>
                         ) : null}
 
-                        {(showViewPdf || showExportPdf) && showTemplateSelect ? (
+                        {(showViewPdf || showExportPdf || showExportMarkdown) &&
+                        showTemplateSelect ? (
                           <div className="my-1 h-px bg-[var(--line)]" />
                         ) : null}
 
@@ -587,6 +592,23 @@ export function PageShell({
                           >
                             <Download className="size-4 shrink-0" />
                             <span>{isPdfBusy ? t('nav.exportingPdf') : t('nav.exportPdf')}</span>
+                          </button>
+                        ) : null}
+
+                        {showExportMarkdown ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              closeActionMenu();
+                              onExportMarkdown();
+                            }}
+                            className={[
+                              'flex w-full items-center gap-3 rounded-[0.95rem] border border-transparent px-3 py-2.5 text-left text-sm font-medium transition',
+                              menuActionClass,
+                            ].join(' ')}
+                          >
+                            <FileText className="size-4 shrink-0" />
+                            <span>{t('nav.exportMarkdown')}</span>
                           </button>
                         ) : null}
 

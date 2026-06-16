@@ -12,6 +12,7 @@ import { useActiveSection } from './hooks/useActiveSection';
 import { useLanguageMode, type LanguageMode } from './hooks/useLanguageMode';
 import { applyGlossaryToProfile } from './lib/i18n/applyGlossary';
 import { translateResumeProfile } from './lib/i18n/translateResume';
+import { buildMarkdownFileName, exportResumeMarkdown } from './lib/markdown/exportResumeMarkdown';
 import { createAiRequest, isAbortError } from './lib/ai/aiRequest';
 import { useResumeImport } from './hooks/useResumeImport';
 import { useThemeMode } from './hooks/useThemeMode';
@@ -942,15 +943,31 @@ function App() {
     }
   }, [buildTemplatePdf, exportFileName, isGeneratingPdf, toast]);
 
+  const handleExportMarkdown = useCallback(() => {
+    try {
+      const markdown = exportResumeMarkdown(activeResume, languageMode);
+      const fileName = buildMarkdownFileName(activeResume, languageMode);
+      downloadBlob(
+        new Blob([markdown], { type: 'text/markdown;charset=utf-8' }),
+        fileName,
+      );
+      toast.success(t('toast.markdownExported'), fileName);    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unknown Markdown export error.';
+      toast.error(t('toast.markdownExportError'), message);
+    }
+  }, [activeResume, languageMode, t, toast]);
+
   const handleApplyImportedResume = useCallback(() => {
-    if (!resumeImport.review) {
+    const review = resumeImport.review;
+    if (!review) {
       return;
     }
 
-    setActiveResume(() => cloneResumeProfile(resumeImport.review.resume));
+    setActiveResume(() => cloneResumeProfile(review.resume));
     setAiEditedFields({});
     setPdfSource({
-      file: resumeImport.review.file,
+      file: review.file,
     });
     setImportOpen(false);
     setIsEditing(false);
@@ -996,12 +1013,14 @@ function App() {
           onExportPdf={() => {
             void handleExportPdf();
           }}
+          onExportMarkdown={handleExportMarkdown}
           canViewPdf={canViewPdf}
           canExportPdf={canExportPdf}
           showEditing
           showImport
           showViewPdf
           showExportPdf
+          showExportMarkdown
           showTemplateSelect
           showAiWorkbench
           showApplicationTracker
@@ -1099,6 +1118,9 @@ function App() {
               onReset={resumeImport.resetImport}
               onSelectFile={(file) => {
                 void resumeImport.importPdf(file);
+              }}
+              onImportText={(text) => {
+                void resumeImport.importText(text);
               }}
             />
           ) : null}

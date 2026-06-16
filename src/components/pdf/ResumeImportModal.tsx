@@ -5,7 +5,7 @@ import {
   LoaderCircle,
   RotateCcw,
 } from 'lucide-react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { formatFileSize } from '../../lib/format';
 import { useLanguageMode } from '../../hooks/useLanguageMode';
 import type {
@@ -29,6 +29,7 @@ type ResumeImportModalProps = {
   onConfigChange: (patch: Partial<ResumeImportAiConfig>) => void;
   onReset: () => void;
   onSelectFile: (file: File) => void;
+  onImportText: (text: string) => void;
 };
 
 const PROVIDER_OPTIONS: Array<{
@@ -79,9 +80,12 @@ export function ResumeImportModal({
   onConfigChange,
   onReset,
   onSelectFile,
+  onImportText,
 }: ResumeImportModalProps) {
   const { t } = useLanguageMode();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const [textMode, setTextMode] = useState(false);
+  const [pastedText, setPastedText] = useState('');
   const isBusy = status === 'extracting' || status === 'parsing';
 
   const statusMessage = (() => {
@@ -151,6 +155,15 @@ export function ResumeImportModal({
                     {isBusy ? t('importer.processing') : t('importer.choosePdf')}
                   </Button>
                   <Button
+                    variant={textMode ? 'secondary' : 'ghost'}
+                    size="sm"
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => setTextMode((current) => !current)}
+                  >
+                    {t('importer.pasteTextToggle')}
+                  </Button>
+                  <Button
                     variant="ghost"
                     size="sm"
                     type="button"
@@ -162,6 +175,34 @@ export function ResumeImportModal({
                   </Button>
                 </div>
               </div>
+
+              {textMode ? (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <label className="block">
+                    <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                      {t('importer.pasteTextLabel')}
+                    </span>
+                    <textarea
+                      value={pastedText}
+                      onChange={(event) => setPastedText(event.target.value)}
+                      placeholder={t('importer.pasteTextPlaceholder')}
+                      rows={10}
+                      className="mt-2 w-full resize-y rounded-2xl border border-slate-200 bg-white px-4 py-3 font-mono text-xs leading-6 text-slate-900 outline-none transition focus:border-slate-400"
+                    />
+                  </label>
+                  <div className="mt-3 flex justify-end">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      type="button"
+                      disabled={isBusy || !pastedText.trim()}
+                      onClick={() => onImportText(pastedText)}
+                    >
+                      {isBusy ? t('importer.processing') : t('importer.parseText')}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="grid gap-4 lg:grid-cols-2">
                 <label className="block">

@@ -243,7 +243,109 @@ export function useResumeImport(fallbackResume: ResumeProfile, outputLanguage: s
         );
       }
     },
-    [config, fallbackResume],
+    [config, fallbackResume, outputLanguage],
+  );
+
+  /**
+   * 从用户粘贴的纯文本 / Markdown 导入简历。
+   * 不经过 pdfjs 文本提取，直接把文本喂给 AI 结构化提取管线。
+   */
+  const importText = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed) {
+        setStatus('error');
+        setError('请粘贴简历文本或 Markdown 内容。');
+        return;
+      }
+
+      if (trimmed.length > MAX_IMPORT_SIZE) {
+        setStatus('error');
+        setError('粘贴内容过大，请控制在 10MB 以内。');
+        return;
+      }
+
+      if (!config.apiKey.trim()) {
+        setStatus('error');
+        setError('请先填写 AI API Key，再导入文本。');
+        return;
+      }
+
+      if (!config.model.trim()) {
+        setStatus('error');
+        setError('请先填写用于提取的模型名称。');
+        return;
+      }
+
+      activeRequestRef.current?.abort();
+
+      try {
+        setStatus('parsing');
+        setError(null);
+        setReview(null);
+
+        const [
+          { draftToResumeProfile },
+          { extractResumeDraftWithAi },
+          { normalizeResumeText },
+        ] = await Promise.all([
+          import('../lib/pdf/draftToResumeProfile'),
+          import('../lib/pdf/extractResumeDraftWithAi'),
+          import('../lib/pdf/normalizeResumeText'),
+        ]);
+
+        const rawText = normalizeResumeText(trimmed);
+        // 粘贴文本没有 PDF 文件，构造一个占位 File，仅用于 review.file 元信息展示
+        const placeholderFile = new File([rawText], 'pasted-resume.md', {
+          type: 'text/markdown',
+        });
+
+        const handle = createAiRequest(
+          (signal) =>
+            extractResumeDraftWithAi({
+              config,
+              file: placeholderFile,
+              fileData: '',
+              rawText,
+              signal,
+              outputLanguage,
+            }),
+          { timeoutMs: 60000 },
+        );
+        activeRequestRef.current = handle;
+        const draft = await handle.promise;
+        if (activeRequestRef.current === handle) {
+          activeRequestRef.current = null;
+        }
+
+        const draftWithWarnings = { ...draft, warnings: [...draft.warnings] };
+        const resume = draftToResumeProfile(draftWithWarnings, fallbackResume);
+
+        setReview({
+          file: placeholderFile,
+          draft: draftWithWarnings,
+          resume,
+          meta: {
+            model: config.model.trim(),
+            usedLocalTextPreview: true,
+          },
+        });
+        setStatus('ready');
+      } catch (caughtError) {
+        if (isAbortError(caughtError)) {
+          setStatus('idle');
+          setError(null);
+          return;
+        }
+        setStatus('error');
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : '文本导入失败，请重试。',
+        );
+      }
+    },
+    [config, fallbackResume, outputLanguage],
   );
 
   const clearApiKey = useCallback(() => {
@@ -257,6 +359,7 @@ export function useResumeImport(fallbackResume: ResumeProfile, outputLanguage: s
     config,
     error,
     importPdf,
+    importText,
     resetImport,
     review,
     status,
